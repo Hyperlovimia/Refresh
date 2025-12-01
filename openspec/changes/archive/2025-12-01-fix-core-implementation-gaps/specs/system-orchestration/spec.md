@@ -6,7 +6,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: 同步与互斥
+### Requirement: 同步机制
 
 系统 MUST 使用互斥锁和事件组保护共享资源和同步任务。
 
