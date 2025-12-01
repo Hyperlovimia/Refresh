@@ -99,17 +99,63 @@ This is an ESP32 embedded systems project built with the Espressif IoT Developme
 Refresh/
 ├── main/                      # Main application component
 │   ├── main.c                 # Entry point (app_main function)
-│   └── CMakeLists.txt         # Component configuration
+│   ├── main.h
+│   ├── CMakeLists.txt         # Component configuration
+│   ├── actuators/             # Actuator control modules
+│   │   ├── fan_control.c
+│   │   └── fan_control.h
+│   ├── algorithm/             # Decision algorithms
+│   │   ├── decision_engine.c
+│   │   ├── decision_engine.h
+│   │   ├── local_mode.c
+│   │   └── local_mode.h
+│   ├── network/               # Network communication
+│   │   ├── mqtt_client.c
+│   │   ├── mqtt_client.h
+│   │   ├── weather_api.c
+│   │   ├── weather_api.h
+│   │   ├── wifi_manager.c
+│   │   └── wifi_manager.h
+│   ├── sensors/               # Sensor interfaces
+│   │   ├── co2_sensor.c
+│   │   ├── co2_sensor.h
+│   │   ├── sensor_manager.c
+│   │   ├── sensor_manager.h
+│   │   ├── sht35.c
+│   │   └── sht35.h
+│   └── ui/                    # User interface
+│       ├── oled_display.c
+│       └── oled_display.h
+├── openspec/                  # OpenSpec documentation and specs
+│   ├── AGENTS.md
+│   ├── project.md
+│   ├── changes/
+│   │   └── archive/
+│   │   
+│   └── specs/
+│       ├── actuator-control/
+│       ├── decision-algorithm/
+│       ├── network-services/
+│       ├── sensor-integration/
+│       ├── system-orchestration/
+│       └── user-interface/
+├── test/                      # Test files and documentation
+│   ├── JX_CO2_102手册.md
+│   └── tmp.md
 ├── build/                     # Build artifacts (git-ignored)
 ├── CMakeLists.txt             # Project-level CMake configuration
 ├── sdkconfig                  # ESP-IDF configuration (git-ignored)
+├── sdkconfig.old              # Previous ESP-IDF configuration (git-ignored)
+├── README.md
+├── AGENTS.md
+├── CLAUDE.md
 └── .devcontainer/             # Dev container setup for QEMU
 ```
 
 ## Build and Development
 
 ### Prerequisites
-- 如果build时提示环境变量错误，请在 bash 执行 get_idf 命令 ，以初始化环境变量
+- 初始化环境变量：如果build时提示环境变量错误，请在 bash 执行 get_idf 命令
 - CMake (typically included with ESP-IDF)
 - idf.py tool (part of ESP-IDF)
 
@@ -226,6 +272,11 @@ Refresh/
 - 禁止在高层文档中堆叠实现细节，确保架构与实现边界清晰
 
 ### Common Commands
+
+**Environment Prerequsite**
+```bash
+get_idf
+```
 
 **Configure project for target device**:
 ```bash
