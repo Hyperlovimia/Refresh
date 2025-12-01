@@ -1,8 +1,7 @@
-# sensor-integration Specification
+# 传感器集成规格增量
 
-## Purpose
-TBD - created by archiving change implement-air-quality-system. Update Purpose after archive.
-## Requirements
+## MODIFIED Requirements
+
 ### Requirement: CO₂ 传感器驱动接口
 
 系统 MUST 从 UART 接收并解析 CO₂ 传感器的主动上报帧，提取有效的浓度值并验证数据范围。
@@ -94,53 +93,4 @@ TBD - created by archiving change implement-air-quality-system. Update Purpose a
 - ✅ 湿度读数在合理范围（0% ~ 100%）
 - ✅ CRC 校验失败时返回 `ESP_ERR_INVALID_CRC` 并打印 WARN 日志
 - ✅ I2C 通信超时时返回相应错误码并打印 ERROR 日志
-
-### Requirement: 传感器管理器接口
-
-传感器管理器 MUST 统一管理所有传感器，提供一次性读取所有数据和健康检查功能。
-
-#### Scenario: 初始化传感器管理器
-
-**Given** 所有传感器驱动尚未初始化
-**When** 调用 `sensor_manager_init()`
-**Then**
-- 依次调用 `co2_sensor_init()` 和 `sht35_init()`
-- 如果任一初始化失败，返回 `ESP_FAIL`
-- 所有初始化成功，返回 `ESP_OK`
-
-#### Scenario: 读取所有传感器数据（正常情况）
-
-**Given** 传感器管理器已初始化
-**When** 调用 `sensor_manager_read_all(&data)`
-**Then**
-- 调用 `co2_sensor_read_ppm()` 读取 CO₂ 浓度
-- 调用 `sht35_read(&temp, &humi)` 读取温湿度
-- 填充 `SensorData` 结构体：
-  ```c
-  data.co2 = 850.0f;
-  data.temperature = 24.5f;
-  data.humidity = 58.0f;
-  ```
-- 函数返回 `ESP_OK`
-
-#### Scenario: 读取传感器数据（CO₂ 传感器故障）
-
-**Given** CO₂ 传感器连续 3 次读取失败
-**When** 调用 `sensor_manager_read_all(&data)`
-**Then**
-- 检测到 CO₂ 传感器故障
-- 使用上次有效值填充 `data.co2`
-- 函数返回 `ESP_FAIL`
-
-#### Scenario: 检查传感器健康状态
-
-**Given** 所有传感器正常工作
-**When** 调用 `sensor_manager_is_healthy()`
-**Then** 返回 `true`
-
-**Given** CO₂ 传感器连续 3 次读取失败
-**When** 调用 `sensor_manager_is_healthy()`
-**Then** 返回 `false`
-
----
 

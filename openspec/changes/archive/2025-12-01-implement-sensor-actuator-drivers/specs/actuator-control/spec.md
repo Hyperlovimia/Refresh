@@ -1,8 +1,7 @@
-# actuator-control Specification
+# 执行器控制规格增量
 
-## Purpose
-TBD - created by archiving change implement-air-quality-system. Update Purpose after archive.
-## Requirements
+## MODIFIED Requirements
+
 ### Requirement: 风扇控制接口
 
 系统 MUST 使用 LEDC 外设生成 25kHz PWM 信号，并根据风扇状态和昼夜模式映射到正确的占空比，同时保护 PWM 范围防止风扇启动失败。
@@ -82,4 +81,3 @@ TBD - created by archiving change implement-air-quality-system. Update Purpose a
 - ✅ PWM < 150 且 != 0 → 限幅为 150（最小启动扭矩）
 - ✅ PWM > 255 → 限幅为 255（最大占空比）
 - ✅ PWM = 0 → 保持 0（允许关闭）
-

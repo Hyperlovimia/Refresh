@@ -1,5 +1,77 @@
 # 操作日志
 
+## 2025-12-01 第二阶段归档完成
+
+### 归档成功
+变更 `implement-sensor-actuator-drivers` 已成功归档为 `2025-12-01-implement-sensor-actuator-drivers`。
+
+### 归档前修复
+**问题**：OpenSpec archive 命令失败，提示 header 不匹配：
+- Delta规格中的"风扇 PWM 控制"需求属于 actuator-control 规格，不应在 sensor-integration 中
+- Delta规格包含"编码规范符合性"需求，这是代码质量检查而非规格修改
+
+**解决方案**：
+1. 创建 `openspec/changes/implement-sensor-actuator-drivers/specs/actuator-control/spec.md`
+2. 将"风扇 PWM 控制"需求（含3个场景）迁移到 actuator-control delta 规格
+3. 从 sensor-integration delta 规格中移除"风扇 PWM 控制"和"编码规范符合性"需求
+4. 保留 sensor-integration delta 规格中的2个传感器驱动需求：
+   - CO₂ 传感器驱动接口
+   - 温湿度传感器驱动接口
+
+**归档结果**：
+```
+Specs to update:
+  actuator-control: update (1 modified)
+  sensor-integration: update (2 modified)
+Totals: + 0, ~ 3, - 0, → 0
+Change 'implement-sensor-actuator-drivers' archived as '2025-12-01-implement-sensor-actuator-drivers'.
+```
+
+### 归档内容总结
+
+**修改的规格**：
+1. **sensor-integration**（2个修改）：
+   - CO₂ 传感器驱动接口：明确 UART 帧格式和解析规则
+   - 温湿度传感器驱动接口：明确 I2C 命令、CRC-8 校验和转换公式
+
+2. **actuator-control**（1个修改）：
+   - 风扇控制接口：明确 LEDC 配置参数和占空比映射规则
+
+**实现的文件**：
+- `main/sensors/co2_sensor.c`：UART 帧解析、预热判定、MODBUS 校准
+- `main/sensors/sht35.c`：I2C 驱动、CRC-8 校验、数据转换
+- `main/actuators/fan_control.c`：LEDC PWM 驱动、占空比映射、范围保护
+- `main/sensors/sensor_manager.c`：缓存机制、I2C 互斥保护、错误恢复
+
+**关键修复**：
+- CO₂缓存值传播逻辑漏洞（关键）
+- UART RX缓冲区1024字节
+- co2_sensor_is_ready() 300秒预热判定
+- co2_sensor_calibrate() MODBUS命令实现
+
+### 待用户执行的硬件测试
+
+**高优先级**：
+- [ ] CO₂缓存值传播测试（验证关键修复）
+- [ ] 传感器读数准确性验证（CO₂、温度、湿度）
+- [ ] 风扇三档响应验证
+
+**中优先级**：
+- [ ] co2_sensor_is_ready() 300秒预热测试
+- [ ] co2_sensor_calibrate() 室外校准测试
+- [ ] 1小时稳定性测试
+
+### 下一步
+
+第二阶段（传感器和执行器驱动）已完成并归档。
+
+**进入第三阶段**：决策算法实现
+- 任务：实现基于 CO₂、温湿度和天气数据的风扇控制算法
+- 参考规格：`openspec/specs/decision-algorithm/spec.md`
+- 前置条件：传感器驱动正常工作（硬件测试验证后）
+
+---
+
 ## 2025-12-01 第二阶段复审修复（第2轮）
 
 ### 变更概述
