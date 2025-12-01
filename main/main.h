@@ -9,6 +9,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/time.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 // ============================================================================
 // 系统状态枚举
@@ -106,5 +108,15 @@ typedef struct {
 // 任务栈大小定义
 #define TASK_STACK_SIZE_SMALL   4096    ///< 小栈（4KB）
 #define TASK_STACK_SIZE_LARGE   8192    ///< 大栈（8KB）
+
+// ============================================================================
+// 全局函数声明
+// ============================================================================
+
+/**
+ * @brief 获取 I2C 互斥锁（用于保护 I2C 总线访问）
+ * @return I2C 互斥锁句柄
+ */
+SemaphoreHandle_t get_i2c_mutex(void);
 
 #endif // MAIN_H

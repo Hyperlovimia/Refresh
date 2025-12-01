@@ -42,6 +42,7 @@ static FanState shared_fan_state = FAN_OFF;
 
 // 同步对象
 static SemaphoreHandle_t data_mutex = NULL;
+static SemaphoreHandle_t i2c_mutex = NULL;
 static EventGroupHandle_t system_events = NULL;
 static QueueHandle_t alert_queue = NULL;
 
@@ -50,6 +51,17 @@ static QueueHandle_t alert_queue = NULL;
 #define EVENT_SENSOR_READY      BIT1
 #define EVENT_SENSOR_STABLE     BIT2
 #define EVENT_SENSOR_FAULT      BIT3
+
+// ============================================================================
+// 全局函数实现
+// ============================================================================
+
+/**
+ * @brief 获取 I2C 互斥锁（用于保护 I2C 总线访问）
+ */
+SemaphoreHandle_t get_i2c_mutex(void) {
+    return i2c_mutex;
+}
 
 // ============================================================================
 // 系统状态转换函数
@@ -68,11 +80,26 @@ static void state_transition(SystemState new_state) {
 }
 
 /**
- * @brief 处理初始化状态
+ * @brief 处理初始化状态（错误恢复或系统首次启动）
  */
 static void handle_init_state(void) {
-    ESP_LOGI(TAG, "进入 INIT 状态");
-    // 状态机将在所有模块初始化成功后自动转换到 PREHEATING
+    static bool init_completed = false;
+
+    // 错误恢复场景：传感器已重新初始化，直接进入预热
+    if (init_completed) {
+        ESP_LOGI(TAG, "系统恢复中，重新启动预热流程");
+        state_transition(STATE_PREHEATING);
+        init_completed = false;  // 重置标志
+        return;
+    }
+
+    // 首次启动场景：等待 system_init() 完成
+    if (xEventGroupWaitBits(system_events, EVENT_SENSOR_READY,
+                            pdFALSE, pdFALSE, 0) & EVENT_SENSOR_READY) {
+        init_completed = true;
+        ESP_LOGI(TAG, "系统初始化完成，进入预热阶段");
+        state_transition(STATE_PREHEATING);
+    }
 }
 
 /**
@@ -155,8 +182,19 @@ static void handle_error_state(void) {
         error_start = 0;
 
         if (sensor_manager_is_healthy()) {
-            ESP_LOGI(TAG, "传感器恢复，重新初始化系统");
+            ESP_LOGI(TAG, "传感器恢复，准备重新初始化");
+
+            // 清除故障标志
             xEventGroupClearBits(system_events, EVENT_SENSOR_FAULT);
+
+            // 重新初始化传感器管理器
+            esp_err_t ret = sensor_manager_reinit();
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "传感器重新初始化失败，继续等待");
+                return;  // 保持在 ERROR 状态，下次重试
+            }
+
+            // 转换到 INIT 状态
             state_transition(STATE_INIT);
         }
     }
@@ -248,39 +286,61 @@ static void decision_task(void *pvParameters) {
 }
 
 /**
- * @brief 网络任务（10分钟周期）
+ * @brief 网络任务（天气10分钟周期 + MQTT 30秒周期）
  */
 static void network_task(void *pvParameters) {
     WeatherData weather;
     SensorData sensor;
     FanState fan;
+    uint32_t last_weather_fetch = 0;
+    uint32_t last_mqtt_publish = 0;
 
     ESP_LOGI(TAG, "网络任务启动");
 
     while (1) {
-        // 检查 WiFi 连接
-        if (wifi_manager_is_connected()) {
-            xEventGroupSetBits(system_events, EVENT_WIFI_CONNECTED);
+        uint32_t now = xTaskGetTickCount() / configTICK_RATE_HZ;
 
-            // 获取天气数据
-            if (weather_api_fetch(&weather) == ESP_OK) {
-                xSemaphoreTake(data_mutex, portMAX_DELAY);
-                memcpy(&shared_weather_data, &weather, sizeof(WeatherData));
-                xSemaphoreGive(data_mutex);
+        // 检查是否需要拉取天气数据（10 分钟周期）
+        if (now - last_weather_fetch >= WEATHER_FETCH_INTERVAL_SEC) {
+            if (wifi_manager_is_connected()) {
+                xEventGroupSetBits(system_events, EVENT_WIFI_CONNECTED);
+
+                ESP_LOGI(TAG, "拉取天气数据");
+                if (weather_api_fetch(&weather) == ESP_OK) {
+                    xSemaphoreTake(data_mutex, portMAX_DELAY);
+                    memcpy(&shared_weather_data, &weather, sizeof(WeatherData));
+                    xSemaphoreGive(data_mutex);
+                    ESP_LOGI(TAG, "天气数据更新成功");
+                } else {
+                    ESP_LOGW(TAG, "天气数据拉取失败，使用缓存");
+                }
+            } else {
+                xEventGroupClearBits(system_events, EVENT_WIFI_CONNECTED);
             }
-
-            // 上报 MQTT 状态
-            xSemaphoreTake(data_mutex, portMAX_DELAY);
-            memcpy(&sensor, &shared_sensor_data, sizeof(SensorData));
-            fan = shared_fan_state;
-            xSemaphoreGive(data_mutex);
-
-            mqtt_publish_status(&sensor, fan);
-        } else {
-            xEventGroupClearBits(system_events, EVENT_WIFI_CONNECTED);
+            last_weather_fetch = now;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(WEATHER_FETCH_INTERVAL_SEC * 1000)); // 10分钟
+        // 检查是否需要发布 MQTT 状态（30 秒周期）
+        if (now - last_mqtt_publish >= MQTT_PUBLISH_INTERVAL_SEC) {
+            if (wifi_manager_is_connected()) {
+                // 获取共享数据（加锁）
+                if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                    memcpy(&sensor, &shared_sensor_data, sizeof(SensorData));
+                    fan = shared_fan_state;
+                    xSemaphoreGive(data_mutex);
+
+                    // 发布状态
+                    esp_err_t ret = mqtt_publish_status(&sensor, fan);
+                    if (ret != ESP_OK) {
+                        ESP_LOGW(TAG, "MQTT 状态发布失败");
+                    }
+                }
+            }
+            last_mqtt_publish = now;
+        }
+
+        // 任务休眠 1 秒（确保及时响应）
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
@@ -346,10 +406,11 @@ static esp_err_t system_init(void) {
 
     // 创建同步对象
     data_mutex = xSemaphoreCreateMutex();
+    i2c_mutex = xSemaphoreCreateMutex();
     system_events = xEventGroupCreate();
     alert_queue = xQueueCreate(5, sizeof(char) * 64);
 
-    if (!data_mutex || !system_events || !alert_queue) {
+    if (!data_mutex || !i2c_mutex || !system_events || !alert_queue) {
         ESP_LOGE(TAG, "同步对象创建失败");
         return ESP_FAIL;
     }

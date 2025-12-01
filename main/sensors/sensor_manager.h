@@ -31,4 +31,10 @@ esp_err_t sensor_manager_read_all(SensorData *data);
  */
 bool sensor_manager_is_healthy(void);
 
+/**
+ * @brief 重新初始化传感器管理器（错误恢复时使用）
+ * @return ESP_OK 成功，ESP_FAIL 失败
+ */
+esp_err_t sensor_manager_reinit(void);
+
 #endif // SENSOR_MANAGER_H
