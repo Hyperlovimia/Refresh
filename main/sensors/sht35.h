@@ -1,6 +1,6 @@
 /**
  * @file sht35.h
- * @brief SHT35 )� hq���I2C	
+ * @brief SHT35 温度湿度传感器接口定义 - I2C 版本
  */
 
 #ifndef SHT35_H
@@ -9,26 +9,20 @@
 #include "esp_err.h"
 
 /**
- * @brief � SHT35  h
- *
- * Mn I2C100kHz, GPIO21 (SDA), GPIO22 (SCL)
- * ξ0@0x447M0@	
- *
- * @return ESP_OK �ESP_FAIL 1%
+ * @brief 初始化 SHT35 传感器
+ * 初始化 I2C 100kHz, GPIO21 (SDA), GPIO22 (SCL), 地址0x44
+ * @return ESP_OK 成功，ESP_FAIL 失败
  */
 esp_err_t sht35_init(void);
 
 /**
- * @brief ��)�pn
- *
- * (ؾ�K�!�}� 0x2C 0x06I� 15ms�� 6 W�
- * ��l
- *   )� = -45 + 175 * (��< / 65535)
- *   � = 100 * (��< / 65535)
- *
- * @param temp )��	
- * @param humi ��%	
- * @return ESP_OK �ESP_FAIL 1%
+ * @brief 读取温度和湿度
+ * 发送命令 0x2C 0x06，等待 15ms，读取 6 字节
+ * 温度 = -45 + 175 * (temp_raw / 65535)
+ * 湿度 = 100 * (humi_raw / 65535)
+ * @param temp 输出温度（摄氏度）
+ * @param humi 输出湿度（%）
+ * @return ESP_OK 成功，ESP_FAIL 失败
  */
 esp_err_t sht35_read(float *temp, float *humi);
 

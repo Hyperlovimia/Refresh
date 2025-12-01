@@ -1,6 +1,6 @@
 /**
  * @file oled_display.h
- * @brief OLED >:Oq¨¥ãSSD1306I2C	
+ * @brief OLED æ˜¾ç¤ºå™¨æ¥å£å®šä¹‰ - SSD1306 I2C ç‰ˆæœ¬
  */
 
 #ifndef OLED_DISPLAY_H
@@ -10,44 +10,34 @@
 #include "main.h"
 
 /**
- * @brief Ë OLED >:O
- *
- * Ë u8g2 “Œ I2C SHT35 q« GPIO21/22	
- * ¨‡128×64 Ur
- * Î¾0@0x3C7M0@	
- *
- * @return ESP_OK ŸESP_FAIL 1%
+ * @brief åˆå§‹åŒ– OLED æ˜¾ç¤ºå™¨
+ * åˆå§‹åŒ– u8g2 åº“ï¼ŒI2C GPIO21/22ï¼Œåœ°å€0x3C
+ * @return ESP_OK æˆåŠŸï¼ŒESP_FAIL å¤±è´¥
  */
 esp_err_t oled_display_init(void);
 
 /**
- * @brief >:;ub
- *
- * @
- *   - ,1LCO‚)¦¦öpn
- *   - ,2-3LCO‚ ‹¿ş˜¿ş	
- *   - ,4L¶ûß!ÎG¶WiFi¶	
- *
- * @param sensor  hpnˆ
- * @param weather )pnˆ
- * @param fan ÎG¶
- * @param mode ûßĞL!
+ * @brief æ˜¾ç¤ºä¸»é¡µé¢
+ *   - ç¬¬1è¡Œï¼šCO2 æ¸©åº¦ æ¹¿åº¦
+ *   - ç¬¬2-3è¡Œï¼šé£æ‰‡çŠ¶æ€ ç³»ç»Ÿæ¨¡å¼
+ *   - ç¬¬4è¡Œï¼šWiFi çŠ¶æ€
+ * @param sensor ä¼ æ„Ÿå™¨æ•°æ®
+ * @param weather å¤©æ°”æ•°æ®
+ * @param fan é£æ‰‡çŠ¶æ€
+ * @param mode ç³»ç»Ÿæ¨¡å¼
  */
 void oled_display_main_page(SensorData *sensor, WeatherData *weather, FanState fan, SystemMode mode);
 
 /**
- * @brief >:Jfub
- *
- * (>:ïJfˆo‚" hEœ"	
- *
- * @param message Jfˆo
+ * @brief æ˜¾ç¤ºå‘Šè­¦é¡µé¢
+ * å…¨å±æ˜¾ç¤ºå‘Šè­¦ä¿¡æ¯
+ * @param message å‘Šè­¦æ¶ˆæ¯
  */
 void oled_display_alert(const char *message);
 
 /**
- * @brief û  CO‚ ‹¿şpn¹„YŸı	
- *
- * @param co2 CO‚ S¦ppm	
+ * @brief æ·»åŠ å†å²å›¾è¡¨ç‚¹
+ * @param co2 CO2 æµ“åº¦ ppm
  */
 void oled_add_history_point(float co2);
 

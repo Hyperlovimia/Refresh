@@ -1,6 +1,6 @@
 /**
  * @file wifi_manager.h
- * @brief WiFi ޥ��MQ��
+ * @brief WiFi 管理器接口定义
  */
 
 #ifndef WIFI_MANAGER_H
@@ -10,27 +10,23 @@
 #include <stdbool.h>
 
 /**
- * @brief � WiFi �h
- *
- * � WiFi q����
- *
- * @return ESP_OK �ESP_FAIL 1%
+ * @brief 初始化 WiFi 管理器
+ * 初始化 WiFi 栈，配置参数，NVS 存储
+ * @return ESP_OK 成功，ESP_FAIL 失败
  */
 esp_err_t wifi_manager_init(void);
 
 /**
- * @brief /�MQ��SmartConfig  BLE	
- *
- * (��!MnͰMn WiFi
- *
- * @return ESP_OK �ESP_FAIL 1%
+ * @brief 启动配网
+ * SmartConfig 和 BLE 配网
+ * (需要先初始化 WiFi)
+ * @return ESP_OK 成功，ESP_FAIL 失败
  */
 esp_err_t wifi_manager_start_provisioning(void);
 
 /**
- * @brief �� WiFi ޥ�
- *
- * @return true �ޥfalse *ޥ
+ * @brief 检查 WiFi 连接状态
+ * @return true 连接，false 未连接
  */
 bool wifi_manager_is_connected(void);
 

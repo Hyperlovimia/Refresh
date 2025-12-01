@@ -1,6 +1,6 @@
 /**
  * @file local_mode.h
- * @brief ,0ê;³V!¥ãÅúCO‚QÜ»¿ö(	
+ * @brief æœ¬åœ°æ¨¡å¼å†³ç­–æ¥å£å®šä¹‰
  */
 
 #ifndef LOCAL_MODE_H
@@ -9,15 +9,12 @@
 #include "main.h"
 
 /**
- * @brief ,0ê;³VÅúCO‚S¦	
- *
- * €<>½åM‘A/¨	
- *   CO‚ > 1200ppm ’ FAN_HIGH
- *   CO‚ > 1000ppm ’ FAN_LOW
- *   CO‚ d 1000ppm ’ FAN_OFF
- *
- * @param co2_ppm CO‚S¦ppm	
- * @return ÎG¶OFF/LOW/HIGH	
+ * @brief æœ¬åœ°æ¨¡å¼å†³ç­–
+ *   CO2 > 1200ppm -> FAN_HIGH
+ *   CO2 > 1000ppm -> FAN_LOW
+ *   CO2 <= 1000ppm -> FAN_OFF
+ * @param co2_ppm CO2 æµ“åº¦ ppm
+ * @return é£æ‰‡çŠ¶æ€ OFF/LOW/HIGH
  */
 FanState local_mode_decide(float co2_ppm);
 

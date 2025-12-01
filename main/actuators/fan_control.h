@@ -1,6 +1,6 @@
 /**
  * @file fan_control.h
- * @brief ÎG§6q¨¥ã30FAN Module X1PWM 	
+ * @brief é£æ‰‡æ§åˆ¶æ¥å£å®šä¹‰ - 30mm FAN Module X1 PWM ç‰ˆæœ¬
  */
 
 #ifndef FAN_CONTROL_H
@@ -12,53 +12,45 @@
 #include <stdint.h>
 
 /**
- * @brief ËÎG§6
- *
- * Mn LEDC PWMGPIO2525kHz8M¨‡
- * löŞ¥
- *   - ESP32 5V ’ ÎG!W 2P-VCC
- *   - ESP32 GND ’ ÎG!W 2P-GND
- *   - ESP32 GPIO25 ’ ÎG!W 3P-PWM
- *
- * @return ESP_OK ŸESP_FAIL 1%
+ * @brief åˆå§‹åŒ–é£æ‰‡æ§åˆ¶
+ * åˆå§‹åŒ– LEDC PWM GPIO25 25kHz 8ä½åˆ†è¾¨ç‡
+ * æ¥çº¿:
+ *   - ESP32 5V -> FAN 2P-VCC
+ *   - ESP32 GND -> FAN 2P-GND
+ *   - ESP32 GPIO25 -> FAN 3P-PWM
+ * @return ESP_OK æˆåŠŸï¼ŒESP_FAIL å¤±è´¥
  */
 esp_err_t fan_control_init(void);
 
 /**
- * @brief ¾nÎG¶›³VÎ(	
- *
- * ê¨9n<! PWMcM
+ * @brief è®¾ç½®é£æ‰‡çŠ¶æ€
+ * PWM å ç©ºæ¯”:
  *   FAN_OFF:  0
- *   FAN_LOW:  ô150~2700rpm	})180~3600rpm	
- *   FAN_HIGH: ô200~4300rpm	})255~6000rpm	
- *
- * @param state ÎG¶OFF/LOW/HIGH	
- * @param is_night_mode /&:ô!22:00-8:00	
- * @return ESP_OK ŸESP_FAIL 1%
+ *   FAN_LOW:  ç™½å¤©~2700rpm (180), å¤œé—´~3600rpm
+ *   FAN_HIGH: ç™½å¤©~4300rpm (255), å¤œé—´~6000rpm
+ * @param state é£æ‰‡çŠ¶æ€ OFF/LOW/HIGH
+ * @param is_night_mode å¤œé—´æ¨¡å¼ 22:00-8:00
+ * @return ESP_OK æˆåŠŸï¼ŒESP_FAIL å¤±è´¥
  */
 esp_err_t fan_control_set_state(FanState state, bool is_night_mode);
 
 /**
- * @brief ô¥¾nPWM`zÔ›KÕ(	
- *
- * ê¨clamp0	Hô0sí	 150-255ĞL	
- *
- * @param duty PWM`zÔ0-255	
- * @return ESP_OK Ÿ
+ * @brief è®¾ç½® PWM å ç©ºæ¯”
+ * clamp åˆ° 0 å’Œ 150-255 èŒƒå›´
+ * @param duty PWM å ç©ºæ¯” 0-255
+ * @return ESP_OK
  */
 esp_err_t fan_control_set_pwm(uint8_t duty);
 
 /**
- * @brief ·ÖSMÎG¶
- *
- * @return SMÎG¶
+ * @brief è·å–å½“å‰é£æ‰‡çŠ¶æ€
+ * @return å½“å‰ FanState
  */
 FanState fan_control_get_state(void);
 
 /**
- * @brief ·ÖSMPWM`zÔ
- *
- * @return SMPWM<0-255	
+ * @brief è·å–å½“å‰ PWM å ç©ºæ¯”
+ * @return å½“å‰ PWM å€¼ 0-255
  */
 uint8_t fan_control_get_pwm(void);
 
