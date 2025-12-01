@@ -1,3 +1,34 @@
+# 审查报告（2025-12-01 21:37 UTC+8, Codex）
+
+## 结论
+- 建议：**退回**（核心驱动接口与规格不符，且健康管理逻辑缺失）
+- 技术评分：60 / 100
+- 战略评分：55 / 100
+- 综合评分：58 / 100
+
+## 评估结果
+1. **CO₂ 帧解析与范围验证未按规格实现（高）**  
+   - 规格要求解析 `CO2:xxxx\r\n` 帧并限制在 400-5000 ppm（openspec/changes/implement-sensor-actuator-drivers/specs/sensor-integration/spec.md:12-35）。当前实现依赖 “`  xxxx ppm`” 子串并仅检查 0-5000（main/sensors/co2_sensor.c:64-118），当固件或上位机输出 `CO2:850` 时无法找到 `ppm` 字样直接判定失败，同时 <400 ppm 的低值会被错误当成有效读数。  
+   - 影响：UART 帧格式一旦按规格部署将完全读不到 CO₂，且会让 200-399 ppm 这类异常值进入决策链条。
+
+2. **CO₂ 驱动接口仍是桩实现（高）**  
+   - `co2_sensor_is_ready()` 始终返回 true，`co2_sensor_calibrate()` 直接报不支持，两者都与规格“基于 60s/300s 窗口判定就绪”及“发送 MODBUS 校准命令”的场景冲突（main/sensors/co2_sensor.c:123-130, openspec/specs/sensor-integration/spec.md:16-41）。  
+   - 同时 `co2_sensor_init()` 仍只分配 256 字节 RX 缓冲（main/sensors/co2_sensor.c:53-56），而规格要求 1024 字节以容纳多帧（openspec/specs/sensor-integration/spec.md:8-21）。这些缺口会导致上电状态机永远视为 ready、无法执行外部校准，并有丢帧风险。
+
+3. **连续失败退化逻辑缺失（中）**  
+   - 规格要求 `sensor_manager_read_all()` 在 CO₂ 连续失败 3 次后使用上一次有效值并返回 `ESP_FAIL`，同时 `sensor_manager_is_healthy()` 应基于该计数判断（openspec/specs/sensor-integration/spec.md:62-104）。当前实现既不缓存上一次成功数据，也不会在 CO₂ 读取失败时累计计数（main/sensors/sensor_manager.c:34-88），所以无法满足“可回放旧值并上报健康状态”的要求。
+
+4. **SHT35/I2C 锁职责与规格不符（中）**  
+   - SHT35 读取场景明确第一步就是“获取 I2C 互斥锁”（openspec/changes/implement-sensor-actuator-drivers/specs/sensor-integration/spec.md:67-98），但 `sht35_read()` 并未涉及互斥，完全依赖调用者（main/sensors/sht35.c:71-134）。若其他调用者未记得拿锁，就会违反规格并重新引入总线竞争。至少需要在文档中声明职责变化或直接在驱动层加锁。
+
+5. **GPIO 引脚文档未同步（低）**  
+   - 代码已改为 SDA=GPIO21/SCL=GPIO20、PWM=GPIO26（main/sensors/sht35.c:13-47, main/actuators/fan_control.c:15-146），但 `sht35.h`、`fan_control.h` 以及 OpenSpec/测试任务仍指向 GPIO22 / GPIO25（main/sensors/sht35.h:11-27, main/actuators/fan_control.h:14-55, openspec/changes/implement-sensor-actuator-drivers/specs/sensor-integration/spec.md:57-158）。这种文档漂移会让硬件接线和测试按旧引脚执行，导致现场调试失败。
+
+## 测试与验证
+- 未执行额外自动化测试；建议在修复上述问题后至少重新运行 `idf.py build` 并完成 UART/I2C/LEDC 烟雾测试。
+
+---
+
 # 审查报告（2025-12-01 20:12 UTC+8, Codex）
 
 ## 结论

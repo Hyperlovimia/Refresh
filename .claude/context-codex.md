@@ -1,3 +1,28 @@
+# Codex 分析上下文（2025-12-01 21:37 UTC+8, Codex）
+
+## 接口契约
+- `co2_sensor_read_ppm()` 仍然依赖 “`  xxxx ppm\r\n`” 帧并只校验 0-5000 ppm（main/sensors/co2_sensor.c:64-120），与增量规格要求的 `CO2:xxxx\r\n` 帧和 400-5000 ppm 范围（openspec/changes/implement-sensor-actuator-drivers/specs/sensor-integration/spec.md:12-35）不一致；若固件切换到 `CO2:` 帧或需要过滤 400ppm 以下读数将直接返回 -1。
+- 传感器管理器没有缓存上一次有效数据，也不会在 CO₂ 连续失败 3 次时降级使用旧值（main/sensors/sensor_manager.c:34-88），无法满足 `sensor_manager_read_all()` “连续失败仍需提供上一次有效值” 的场景描述（openspec/specs/sensor-integration/spec.md:62-86）。
+
+## 边界条件
+- `co2_sensor_is_ready()` 仍是固定返回 true 的桩（main/sensors/co2_sensor.c:123-126），无法基于 60s 预热 / 300s 稳定窗口判断 readiness（openspec/specs/sensor-integration/spec.md:16-36）。
+- `co2_sensor_calibrate()` 未实现 MODBUS 指令发送（main/sensors/co2_sensor.c:128-130），与手动校准情景的 ESP_OK 返回要求（openspec/specs/sensor-integration/spec.md:29-41）冲突。
+- `sht35_read()` 内部并未获取/释放 I2C 互斥锁（main/sensors/sht35.c:71-134），而规格将互斥锁作为该函数步骤的一部分（openspec/changes/implement-sensor-actuator-drivers/specs/sensor-integration/spec.md:67-98），需要澄清职责划分或者在驱动层补齐。
+
+## 风险评估
+- SCL/PWM 引脚在代码中改为 GPIO20/GPIO26，但 `sht35.h`、`fan_control.h` 及 OpenSpec 仍记载 GPIO22/GPIO25（main/sensors/sht35.h:11-27, main/actuators/fan_control.h:14-55, openspec/changes/implement-sensor-actuator-drivers/specs/sensor-integration/spec.md:57-158），极易导致硬件接线或测试任务误连。
+- UART 缓冲区仍配置 256 字节（main/sensors/co2_sensor.c:53-56），小于规格要求的 1024 字节（openspec/specs/sensor-integration/spec.md:8-21）；若后续叠加更多传感器帧可能覆盖已有数据。
+
+## 技术建议
+1. 解析逻辑可兼容 `CO2:xxxx` 与 `xxxx ppm` 两种帧格式，并将有效范围 clamp 到 400-5000 ppm，以同时满足手册与规格。
+2. 在驱动层维护预热计时与 MODBUS 校准命令，避免所有上层模块都无法判断 readiness / 触发校准。
+3. 传感器管理器应缓存最后一次有效的 `SensorData`，并在 CO₂ 连续失败阈值达到时返回旧值 + `ESP_FAIL`，同时向 UI/决策层抛出健康状态。
+4. 尽快同步 SCL/PWM 引脚修改到 `.h` 文档与 OpenSpec，保持硬件与软件一致。
+
+## 观察报告
+- `fan_control.c` 已锁定 GPIO26/25kHz/8bit 配置，但头文件与规格仍旧说明 GPIO25，且测试清单也指向 GPIO25（main/actuators/fan_control.c:15-146, openspec/changes/implement-sensor-actuator-drivers/specs/sensor-integration/spec.md:101-178）；建议在下一个提案中统一。
+- `main/main.h` 中 “CO?”、“μg/m?” 等乱码仍然存在，说明编码治理未完成，将影响后续第三阶段算法实现时的可读性。
+
 # Codex 分析上下文（2025-12-01 20:11 UTC+8, Codex）
 
 ## 接口契约

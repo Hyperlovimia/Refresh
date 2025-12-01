@@ -10,7 +10,7 @@
 
 /**
  * @brief 初始化 SHT35 传感器
- * 初始化 I2C 100kHz, GPIO21 (SDA), GPIO22 (SCL), 地址0x44
+ * 初始化 I2C 100kHz, GPIO21 (SDA), GPIO20 (SCL), 地址0x44
  * @return ESP_OK 成功，ESP_FAIL 失败
  */
 esp_err_t sht35_init(void);

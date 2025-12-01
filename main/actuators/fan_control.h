@@ -13,11 +13,12 @@
 
 /**
  * @brief 初始化风扇控制
- * 初始化 LEDC PWM GPIO25 25kHz 8位分辨率
+ * 初始化 LEDC PWM GPIO26 25kHz 8位分辨率
  * 接线:
  *   - ESP32 5V -> FAN 2P-VCC
  *   - ESP32 GND -> FAN 2P-GND
- *   - ESP32 GPIO25 -> FAN 3P-PWM
+ *   - ESP32 GPIO26 -> FAN 3P-PWM
+ * 注意: ESP32-S3 跳过 GPIO22-25，因此使用 GPIO26 而非 GPIO25
  * @return ESP_OK 成功，ESP_FAIL 失败
  */
 esp_err_t fan_control_init(void);
