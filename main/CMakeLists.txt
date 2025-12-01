@@ -1,2 +1,21 @@
-idf_component_register(SRCS "main.c"
-                    INCLUDE_DIRS ".")
+idf_component_register(
+    SRCS
+        "main.c"
+        "sensors/co2_sensor.c"
+        "sensors/sht35.c"
+        "sensors/sensor_manager.c"
+        "actuators/fan_control.c"
+        "algorithm/decision_engine.c"
+        "algorithm/local_mode.c"
+        "network/wifi_manager.c"
+        "network/weather_api.c"
+        "network/mqtt_client.c"
+        "ui/oled_display.c"
+    INCLUDE_DIRS
+        "."
+        "sensors"
+        "actuators"
+        "algorithm"
+        "network"
+        "ui"
+)

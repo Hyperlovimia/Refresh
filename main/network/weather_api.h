@@ -1,0 +1,48 @@
+/**
+ * @file weather_api.h
+ * @brief åŒ) API ¢7Ô•„
+ */
+
+#ifndef WEATHER_API_H
+#define WEATHER_API_H
+
+#include "esp_err.h"
+#include "main.h"
+#include <stdbool.h>
+
+/**
+ * @brief À) API ¢7Ô
+ *
+ * À HTTPS ¢7ÔåX
+ *
+ * @return ESP_OK üESP_FAIL 1%
+ */
+esp_err_t weather_api_init(void);
+
+/**
+ * @brief ∑÷ûˆ)pn« HTTPS ˜B	
+ *
+ * ˜BåŒ) API„ê JSON Õî–÷ PM2.5)¶Œ
+ *
+ * @param data )pnà
+ * @return ESP_OK üESP_FAIL 1%
+ */
+esp_err_t weather_api_fetch(WeatherData *data);
+
+/**
+ * @brief ∑÷XÑ)pn
+ *
+ * @param data )pnà
+ */
+void weather_api_get_cached(WeatherData *data);
+
+/**
+ * @brief ¿ÂX/&«
+ *
+ * X	H30ü
+ *
+ * @return true «false 	H
+ */
+bool weather_api_is_cache_stale(void);
+
+#endif // WEATHER_API_H

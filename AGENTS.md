@@ -171,7 +171,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | code.reuse：优先复用官方 SDK/主流生态，禁止额外自研 | |
 | code.fix_first：发现缺陷优先修复，再扩展新功能 | |
 | code.small_steps：采用小步修改，每次变更保持可编译可验证 | |
-| code.comments.zh：所有代码注释使用简体中文，描述意图、约束与使用方式 | |
+| code.comments.zh：所有代码注释使用简体中文，编码为UTF-8(无BOM)，描述意图、约束与使用方式 | |
 | code.solid：设计实现必须遵守 SOLID 原则 | |
 | code.style：始终符合编程语言标准代码风格和项目既有风格 | |
 | code.complete：禁止 MVP、占位或最小实现，提交完整具体实现 | |

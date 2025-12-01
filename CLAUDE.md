@@ -27,7 +27,7 @@ This is an ESP32 embedded systems project built with the Espressif IoT Developme
 
 必须明确职责划分：你作为主AI，负责规划与执行工作，而所有分析与审查工作必须请求用户处理，用户将自行使用 Codex 进行分析。
 
-所有文档以及注释必须用简体中文编写。
+所有文档以及注释必须用简体中文，UTF-8(无BOM)格式编写并保存。
 
 ### 执行规则
 当我表达模糊时，你必须用多轮提问澄清。可以质疑我的思路，考虑更优的选择。
@@ -59,7 +59,7 @@ This is an ESP32 embedded systems project built with the Espressif IoT Developme
 ## ✅ 代码质量强制标准
 
 ### 📝 注释规范
-- 所有文档与必要代码注释必须使用简体中文，描述意图、约束与使用方式。
+- 所有文档与必要代码注释必须使用简体中文UTF-8(无BOM)编写并保存，描述意图、约束与使用方式。
 - 禁止编写"修改说明"式注释，所有变更信息应由版本控制和日志承担。
 - 当模块依赖复杂或行为非显而易见时，必须补充中文注释解释设计理由。
 
@@ -109,8 +109,7 @@ Refresh/
 ## Build and Development
 
 ### Prerequisites
-- 必须首先在 bash 执行 get_idf ，以初始化环境变量
-（参考信息 ~/.bashrc：alias get_idf='. $HOME/esp/v5.5.1/esp-idf/export.sh'）
+- 如果build时提示环境变量错误，请在 bash 执行 get_idf 命令 ，以初始化环境变量
 - CMake (typically included with ESP-IDF)
 - idf.py tool (part of ESP-IDF)
 
