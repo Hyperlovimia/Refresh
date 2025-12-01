@@ -1,24 +1,24 @@
-# Codex 分析上下文（2025-12-01 18:11 UTC+8, Codex）
+# Codex 分析上下文（2025-12-01 20:11 UTC+8, Codex）
 
 ## 接口契约
-- `system_init()` 应负责在 `app_main()` 启动阶段创建全部同步原语并初始化各模块，规格要求包括 `data_mutex`、`i2c_mutex` 和 `system_events`（openspec/specs/system-orchestration/spec.md#L201-L230）。
-- 网络任务需要同时执行天气拉取（10 分钟）和 MQTT 状态上报（30 秒/状态变化）两类工作，接口由 `mqtt_publish_status()`/`mqtt_publish_alert()` 暴露（openspec/changes/archive/2025-12-01-implement-air-quality-system/design.md#L565-L590）。
+- `system_init()` 现已在启动阶段创建 `data_mutex`、`i2c_mutex`、`system_events` 等同步对象，并通过 `get_i2c_mutex()` 向其他模块暴露 I2C 锁（main/main.c:43-main/main.c:64, main/main.c:407-main/main.c:417）。
+- `network_task()` 使用两个独立计数器管理 10 分钟天气轮询与 30 秒 MQTT 发布（main/main.c:288-main/main.c:345），满足规格要求的双节拍。
 
 ## 边界条件
-- I2C 总线由 SHT35 读写和 OLED 刷屏共享，必须依赖互斥锁避免总线冲突；当前代码仅创建 `data_mutex/system_events/alert_queue`（main/main.c#L43-L46）且不存在任何 `i2c_mutex` 引用。
-- 传感器故障恢复流程需要在错误状态解除后重新执行预热与稳定阶段，否则状态机会卡在 INIT，导致 `decision_task` 永久休眠（main/main.c#L137-L214）。
-- MQTT 发布频率需相对于 30 秒节拍工作；`MQTT_PUBLISH_INTERVAL_SEC` 在主头文件中定义但未被使用（main/main.h#L95-L97 主动常量，`rg` 没有匹配）。
+- 传感器错误恢复路径：`handle_error_state()` 每 10 秒检查健康状态，成功后调用 `sensor_manager_reinit()` 并回到 `STATE_INIT`（main/main.c:164-main/main.c:199, main/sensors/sensor_manager.c:90-main/sensors/sensor_manager.c:112）。`handle_init_state()` 利用状态标志重新进入 PREHEATING，从而再次执行 60 秒预热和 240 秒稳定阶段（main/main.c:82-main/main.c:125）。
+- SHT35 读写与 OLED 刷屏都围绕同一个 I2C 锁执行，超时 100ms 以防任务被永久阻塞（main/sensors/sensor_manager.c:47-main/sensors/sensor_manager.c:63, main/ui/oled_display.c:18-main/ui/oled_display.c:44）。
+- 源代码仍存在多处中文注释和日志乱码（例如 main/sensors/co2_sensor.c:1-main/sensors/co2_sensor.c:76、main/algorithm/decision_engine.c:1-main/algorithm/decision_engine.c:59、main/algorithm/local_mode.c:1-main/algorithm/local_mode.c:22），与“全部注释使用 UTF-8 中文”规范冲突。
 
 ## 风险评估
-- 缺少 I2C 互斥锁可能导致 OLED 和 SHT35 同时操作总线时出现驱动崩溃或阻塞，属于并发安全缺陷。
-- 错误状态恢复逻辑无法重新运行 `system_init()` 或重置状态机，传感器恢复后系统仍停留在 INIT，造成业务长期不可用。
-- MQTT 状态包只会在 10 分钟网络周期内发送一次，远超规格要求，可能触发后台监控误报或 SLA 违规。
+- I2C 互斥锁已经落实，硬件总线冲突风险显著降低。
+- 错误恢复路径能够重新执行预热/稳定阶段，但 `handle_init_state()` 对事件位的依赖较脆弱，如未来清除 EVENT_SENSOR_READY 可能导致恢复流程失效，需要在后续迭代中关注。
+- 编码问题尚未解决，导致驱动和算法模块的注释与日志不可读，阻碍后续实现与调试。
 
 ## 技术建议
-1. 在 `main/main.c` 定义 `static SemaphoreHandle_t i2c_mutex` 并于 `system_init()` 调用 `xSemaphoreCreateMutex()`；SHT35 采样与 OLED 刷屏前后调用 `xSemaphoreTake/Give(i2c_mutex)`。
-2. 拆分网络任务的节拍：保持 10 分钟天气轮询，同时新增以 `MQTT_PUBLISH_INTERVAL_SEC` 为基准的循环发布，或改为两个 FreeRTOS 任务/软件定时器。
-3. 在 `handle_error_state()` 检测传感器恢复后，调用新的 `system_recover()`：重新运行关键子模块初始化、清零计时器并显式 `state_transition(STATE_PREHEATING)`。
+1. 将 `handle_init_state()` 的判定逻辑改为显式标记而非依赖事件位，以免未来在清除事件位时破坏恢复路径。
+2. 清理剩余乱码文件（至少包含 `co2_sensor.c`、`decision_engine.c`、`local_mode.c`），统一改写为可读中文注释与日志。
 
 ## 观察报告
-- 传感器、网络、显示等多个 `.c` 文件中的中文注释和日志字符串出现大量乱码（如 main/sensors/co2_sensor.c#L1-L30、main/network/wifi_manager.c#L1-L27、main/ui/oled_display.c#L1-L34），表明编码未按“所有注释使用 UTF-8 中文”规范存储，需要重新保存或替换为有效文案。
-- `network_task()` 仅依据 `WEATHER_FETCH_INTERVAL_SEC` 延迟（main/main.c#L250-L284），没有引用 `MQTT_PUBLISH_INTERVAL_SEC`，直接导致 MQTT 发布周期与规格不符。
+- I2C 锁在 `sensor_manager_read_all()` 和 `oled_display_*` 中被调用，证实互斥保护已经补齐。
+- MQTT 发布频率修正为 `MQTT_PUBLISH_INTERVAL_SEC` 节拍，但 `wifi_manager_is_connected()` 仍是桩函数，后续需要结合真实连接状态测试。
+- 多个模块（co2_sensor/decision_engine/local_mode）仍输出 “??” 字符，说明阶段 4 的编码修复并未覆盖全部文件，仍需整改。

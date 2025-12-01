@@ -155,3 +155,18 @@ $ idf.py fullclean build
 1. 由用户在硬件设备上执行功能测试（Task 1.5, 2.4, 3.2）
 2. 根据测试结果更新本日志
 3. 如测试通过，使用 `/openspec:archive` 归档此变更
+
+### 2025-12-01 审查复核记录
+- 20:00 (UTC+8) sequential-thinking：复查任务说明及四项修复目标，制定二次审查步骤。
+- 20:01 (UTC+8) plan-tool：记录三步计划（检查代码 → 验证规格 → 更新报告）。
+- 20:02 (UTC+8) shell(date)：获取当前时间戳用于日志与文档记录。
+- 20:03 (UTC+8) shell(sed -n '1,640p' main/main.c)：逐段审阅 main.c 中 I2C 锁、错误恢复和网络任务节拍改动。
+- 20:04 (UTC+8) shell(sed -n '1,200p' main/main.h)：确认 I2C 锁接口及 FreeRTOS 头文件定义。
+- 20:05 (UTC+8) shell(sed -n '1,200p' main/sensors/sensor_manager.h)：检查新增 sensor_manager_reinit() 接口。
+- 20:06 (UTC+8) shell(sed -n '1,220p' main/sensors/sensor_manager.c)：确认 I2C 加锁和重新初始化逻辑。
+- 20:07 (UTC+8) shell(sed -n '1,200p' main/ui/oled_display.c)：验证 OLED 显示模块的 I2C 锁保护与编码修复。
+- 20:08 (UTC+8) shell(sed -n '1,200p' main/sensors/co2_sensor.c)：检查编码修复状态，注意仍存在大量“??”日志。
+- 20:09 (UTC+8) shell(sed -n '1,160p' main/algorithm/decision_engine.c)：确认算法模块仍留有乱码注释。
+- 20:10 (UTC+8) shell(sed -n '1,120p' main/algorithm/local_mode.c)：继续检查编码状况，发现本地模式模块仍未修复乱码。
+- 20:11 (UTC+8) apply_patch(.claude/context-codex.md)：更新上下文，记录 I2C/恢复路径已修复但编码问题仍在。
+- 20:12 (UTC+8) apply_patch(.claude/review-report.md)：更新审查报告，标记前三项问题已关闭，仅剩编码缺陷需讨论。

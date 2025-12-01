@@ -55,22 +55,22 @@ esp_err_t co2_sensor_init(void) {
     }
 
     s_uart_ready = true;
-    ESP_LOGI(TAG, "?? CO2 UART GPIO16/17 9600 8N1 ??");
+    ESP_LOGI(TAG, "CO2 UART 初始化完成 GPIO16/17 9600 8N1");
     return ESP_OK;
 }
 
 float co2_sensor_read_ppm(void) {
-    // TODO: ?? - ?? UART ?? ASCII ??
-    // ????(??)
+    // TODO: 实现 - 通过 UART 读取 ASCII 命令
+    // 发送读取命令(阻塞)
     return 850.0f;
 }
 
 bool co2_sensor_is_ready(void) {
-    // TODO: ?? - ???????
+    // TODO: 实现 - 检查传感器是否准备好
     return true;
 }
 
 esp_err_t co2_sensor_calibrate(void) {
-    ESP_LOGW(TAG, "????????");
+    ESP_LOGW(TAG, "校准功能暂不支持");
     return ESP_ERR_NOT_SUPPORTED;
 }

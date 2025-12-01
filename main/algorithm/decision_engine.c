@@ -1,6 +1,6 @@
 /**
  * @file decision_engine.c
- * @brief ???????
+ * @brief 决策引擎
  */
 
 #include "decision_engine.h"
@@ -12,23 +12,23 @@ static const char *TAG = "DECISION";
 
 FanState decision_make(SensorData *sensor, WeatherData *weather, SystemMode mode) {
     if (!sensor || !sensor->valid) {
-        ESP_LOGW(TAG, "???????");
+        ESP_LOGW(TAG, "传感器数据无效");
         return FAN_OFF;
     }
 
-    // MODE_SAFE_STOP???????
+    // MODE_SAFE_STOP 模式下强制关闭
     if (mode == MODE_SAFE_STOP) {
         return FAN_OFF;
     }
 
-    // MODE_LOCAL???? CO2 ??
+    // MODE_LOCAL 模式下根据 CO2 决策
     if (mode == MODE_LOCAL) {
         return local_mode_decide(sensor->co2);
     }
 
-    // MODE_NORMAL ? MODE_DEGRADED?????????
-    // TODO: ?? - Benefit-Cost ??
-    // ???? CO2 ????
+    // MODE_NORMAL 或 MODE_DEGRADED 模式下基于阈值决策
+    // TODO: 实现 - Benefit-Cost 分析
+    // 根据 CO2 浓度决策
     if (sensor->co2 > CO2_THRESHOLD_HIGH) {
         return FAN_HIGH;
     } else if (sensor->co2 > CO2_THRESHOLD_LOW) {
@@ -39,21 +39,21 @@ FanState decision_make(SensorData *sensor, WeatherData *weather, SystemMode mode
 }
 
 SystemMode decision_detect_mode(bool wifi_ok, bool cache_valid, bool sensor_ok) {
-    // ???????
+    // 系统模式检测
     if (!sensor_ok) {
         return MODE_SAFE_STOP;
     }
 
-    // WiFi ???????
+    // WiFi 连接正常
     if (wifi_ok) {
         return MODE_NORMAL;
     }
 
-    // WiFi ??????? <30min
+    // WiFi 断开但缓存有效期 <30min
     if (cache_valid) {
         return MODE_DEGRADED;
     }
 
-    // ??????????
+    // 所有条件失败进入本地模式
     return MODE_LOCAL;
 }
