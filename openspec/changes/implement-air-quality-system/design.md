@@ -431,26 +431,73 @@ xSemaphoreGive(i2c_mutex);
 
 ### 6.4 风扇控制 (PWM)
 
-**引脚连接**：
-- ESP32 GPIO（待选） → MOSFET 栅极 → 风扇正极
-- 风扇负极 → GND
+**硬件规格**：30FAN Module X1
+- 工作电压：5V DC
+- 工作电流：<100mA（远低于ESP32-S3的5V引脚500mA容量）
+- 控制方式：PWM调速（3.3V/5V TTL兼容）
+- 转速范围：2700-6000 RPM（PWM duty 59%-100%）
+- 启动扭矩要求：PWM duty ≥ 150/255 (约59%)
+
+**引脚连接**（仅需3根杜邦线）：
+- ESP32 5V引脚 → 风扇模块 2P-VCC（电源）
+- ESP32 GND → 风扇模块 2P-GND（地）
+- ESP32 GPIO25 → 风扇模块 3P-PWM（控制信号）
+
+注意：3P端口的VCC和GND引脚悬空不接（已通过2P端口供电）
 
 **PWM 配置**：
 - 频率：25kHz（超声频率，避免噪音）
 - 分辨率：8位（0-255）
-- 占空比：
-  - OFF: 0%
-  - LOW: 50%（占空比 128/255）
-  - HIGH: 100%（占空比 255/255）
+- 占空比范围：0（关闭）或 150-255（运行）
+- 档位映射（基于昼夜模式优化）：
+  ```
+  ┌─────────┬──────┬─────────┬─────────┐
+  │ 状态    │ PWM  │ 转速估算 │ 应用场景 │
+  ├─────────┼──────┼─────────┼─────────┤
+  │ 关闭    │ 0    │ 0rpm    │ 无需通风 │
+  │ 夜间低速│ 150  │ ~2700rpm│ 静音优先 │
+  │ 白天低速│ 180  │ ~3600rpm│ 正常通风 │
+  │ 夜间高速│ 200  │ ~4300rpm│ 快速换气 │
+  │ 白天高速│ 255  │ ~6000rpm│ 最大风量 │
+  └─────────┴──────┴─────────┴─────────┘
+  ```
 
 **驱动接口**：
 ```c
-esp_err_t fan_control_init(void) {
-    // 配置 LEDC PWM：25kHz, 8位分辨率
+// 初始化风扇控制
+esp_err_t fan_control_init(void);
+
+// 设置风扇状态（供决策引擎调用，自动根据昼夜模式映射PWM）
+esp_err_t fan_control_set_state(FanState state, bool is_night_mode);
+
+// 直接设置PWM占空比（供测试使用，自动clamp到0或150-255）
+esp_err_t fan_control_set_pwm(uint8_t duty);
+
+// 获取当前状态
+FanState fan_control_get_state(void);
+
+// 获取当前PWM值
+uint8_t fan_control_get_pwm(void);
+```
+
+**实现要点**：
+```c
+// PWM范围保护：强制最小启动扭矩
+static uint8_t fan_clamp_pwm(uint8_t raw_pwm) {
+    if (raw_pwm == 0) return 0;           // 允许完全关闭
+    if (raw_pwm < 150) return 150;        // 强制最小值（保证启动扭矩）
+    if (raw_pwm > 255) return 255;        // 限制最大值
+    return raw_pwm;
 }
 
-esp_err_t fan_control_set_state(FanState state) {
-    // 根据 state 设置占空比
+// 档位映射函数
+uint8_t fan_control_get_pwm_duty(FanState state, bool is_night_mode) {
+    switch (state) {
+        case FAN_OFF:  return 0;
+        case FAN_LOW:  return is_night_mode ? 150 : 180;
+        case FAN_HIGH: return is_night_mode ? 200 : 255;
+        default:       return 0;
+    }
 }
 ```
 
@@ -652,16 +699,6 @@ xSemaphoreGive(i2c_mutex);
 
 **总估算**：峰值 <40%，平均 <20%
 
-### 10.3 功耗估算
-
-- ESP32-S3（WiFi 开启）：约 100mA
-- CO₂ 传感器：约 60mA
-- SHT35：约 1mA
-- OLED：约 20mA
-- 风扇（最大功率）：约 2000mA（由外部供电）
-
-**总计**：约 180mA @ 5V（ESP32 相关），风扇独立供电
-
 ---
 
 ## 11. 测试策略
@@ -681,7 +718,9 @@ xSemaphoreGive(i2c_mutex);
 **硬件在环测试**：
 - CO₂ 传感器读取（人为呼气提高浓度）
 - SHT35 温湿度读取
-- 风扇 PWM 控制（万用表测量占空比）
+- 风扇 PWM 控制（示波器测量GPIO25输出，验证25kHz频率和占空比）
+- 风扇转速测试（PWM=150/180/200/255时转速递增可感知）
+- 电源稳定性测试（万用表测量5V引脚电压降<0.2V）
 - OLED 显示正确性
 
 ### 11.3 压力测试
@@ -783,3 +822,4 @@ xSemaphoreGive(i2c_mutex);
 - EMQX MQTT 文档：https://www.emqx.io/docs/
 - SHT35 数据手册：https://www.sensirion.com/sht3x
 - SSD1306 数据手册：https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
+- JX_CO2_102手册: test/JX_CO2_102手册.md

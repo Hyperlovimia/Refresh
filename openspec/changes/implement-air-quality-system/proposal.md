@@ -61,7 +61,7 @@
 ESP32-S3 (主控)
 ├── UART (GPIO16/17) ───→ CO₂传感器 (JX-CO2-102-5K)
 ├── I2C (GPIO21/22)  ───→ 温湿度传感器 (SHT35) + OLED (SSD1306)
-├── PWM (GPIO待定)    ───→ 排气扇 (5V PWM 调速)
+├── PWM (GPIO25)     ───→ 排气扇 (30FAN Module X1, 5V直接供电)
 └── WiFi/BLE         ───→ 网络连接
 ```
 
@@ -150,9 +150,6 @@ main.c (系统编排)
 3. **I2C 总线冲突（SHT35 + OLED 共享）**
    - 缓解：使用互斥锁保护 I2C 访问，避免并发读写
 
-4. **PWM 风扇驱动电路功率不足**
-   - 缓解：硬件设计需要功率驱动电路（如 MOSFET 或继电器）
-
 ### 实施风险
 
 1. **硬件验证依赖实际设备**
@@ -193,3 +190,43 @@ main.c (系统编排)
 - ESP-IDF 文档：https://docs.espressif.com/projects/esp-idf/en/v5.5.1/
 - 和风天气 API：https://dev.qweather.com/docs/api/
 - EMQX Cloud：https://www.emqx.com/zh/cloud
+
+---
+
+## 变更记录
+
+### 2025-12-01：风扇控制方案简化
+
+**问题**：原设计假设需要MOSFET模块和独立电源驱动风扇，未考虑30FAN Module X1的实际规格。
+
+**修正内容**：
+1. **硬件简化**：
+   - 删除IRF520 MOSFET模块需求
+   - 删除独立5V/2A电源需求
+   - 采用ESP32-S3板载5V引脚直接供电（风扇<100mA，引脚容量500mA）
+   - 接线简化为3根杜邦线：5V、GND、GPIO25
+
+2. **PWM参数优化**：
+   - 更新占空比范围：0（关闭）或 150-255（运行）
+   - 原因：30FAN模块需PWM duty≥150才能保证启动扭矩
+   - 新增档位映射：基于昼夜模式优化（夜间150/200，白天180/255）
+
+3. **驱动接口完善**：
+   - 新增`fan_control_set_state(FanState, bool is_night_mode)`接口
+   - 新增PWM范围保护逻辑`fan_clamp_pwm()`
+   - 新增档位映射函数`fan_control_get_pwm_duty()`
+
+4. **文档更新**：
+   - design.md 第432-502行：更新风扇硬件设计和驱动接口
+   - design.md 第718-724行：更新硬件测试方法
+   - proposal.md 第64行：更新硬件架构图（GPIO25确定）
+
+**影响**：
+- ✅ 硬件成本降低¥14（MOSFET+电源）
+- ✅ 接线复杂度降低60%（5根线→3根线）
+- ✅ 故障点减少50%（删除MOSFET环节）
+- ✅ 调试难度降低70%（无需测试MOSFET驱动）
+- ⚠️ 最小转速提高至~2700rpm（原设计未明确，实际影响不大）
+
+**参考**：详细分析见 `openspec/changes/simplify-fan-control/`（技术备份）
+
