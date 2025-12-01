@@ -1,3 +1,47 @@
+# 审查报告（2025-12-01 22:53 UTC+8, Codex）
+
+## 结论
+- 建议：**通过**（规格缺口已补齐，退化路径与驱动接口符合要求）
+- 技术评分：88 / 100
+- 战略评分：85 / 100
+- 综合评分：87 / 100
+
+## 评估结果
+1. **CO₂ 缓存退化逻辑 ✅**  
+   - `sensor_manager_read_all()` 现在在连续失败≥3次且有缓存时设置 `using_cache`，令 `data->co2` 取 `last_valid_co2`，并把 `data->valid` 定义为“温湿度正常即可使用”的语义，同时返回 `ESP_FAIL` 提示退化（main/sensors/sensor_manager.c:47-105）。  
+   - `sensor_task()` 也改为只要 `data.valid` 就更新共享缓冲区，`ret == ESP_FAIL` 时打印缓存提示（main/main.c:210-227）。因而决策/网络模块在硬件断线时仍能获得上次有效的 CO₂ 值，满足 openspec “连续失败仍需提供上一次有效值” 场景。
+
+2. **CO₂ 驱动规格符合性 ✅**  
+   - UART RX 缓冲扩展至 1024 字节并在初始化时记录 `s_init_time`（main/sensors/co2_sensor.c:13-63），`co2_sensor_is_ready()` 根据 `xTaskGetTickCount()` 判断 300 秒预热窗口（main/sensors/co2_sensor.c:125-140）。  
+   - `co2_sensor_calibrate()` 实现了 JX-CO2-102 的 MODBUS 校准命令并校验响应头（main/sensors/co2_sensor.c:143-177）。至此规格中关于缓冲区大小、预热判定与手动校准的场景均被覆盖。
+
+## 测试与验证
+- 未新增自动化测试；建议按用户计划执行 CO₂ 缓存传播、300 秒预热与现场校准验证，确保硬件层面无回归。
+
+---
+
+# 审查报告（2025-12-01 22:28 UTC+8, Codex）
+
+## 结论
+- 建议：**退回**（退化逻辑仍未让系统获得缓存数据，CO₂ 驱动接口也未按规格完成）
+- 技术评分：65 / 100
+- 战略评分：60 / 100
+- 综合评分：63 / 100
+
+## 评估结果
+1. **CO₂ 缓存数据仍无法被系统使用（高）**  
+   - `sensor_manager_read_all()` 虽然在失败 ≥3 次时写入 `data->co2 = last_valid_co2`，但 `data->valid` 依旧等于 `co2_valid && temp_valid && humi_valid`，当本次 CO₂ 读取失败时就被置为 false（main/sensors/sensor_manager.c:47-100）。  
+   - `sensor_task()` 只会在 `ret == ESP_OK && data.valid` 条件成立时把数据写入共享缓冲区（main/main.c:215-224），所以缓存值从未传播到决策/网络等模块。规格场景“连续失败后使用上次有效值”（openspec/specs/sensor-integration/spec.md:121-128）依旧无法满足，硬件断开后系统完全没有任何 CO₂ 数据可用。
+
+2. **CO₂ 驱动接口依旧不符合规格（高）**  
+   - `co2_sensor_init()` 仍用 256 字节 RX 缓冲（main/sensors/co2_sensor.c:53-56），未达到规格要求的 1024 字节（openspec/specs/sensor-integration/spec.md:10-17）；在主动上报模式堆积多帧时仍有丢帧风险。  
+   - `co2_sensor_is_ready()` 始终返回 true、`co2_sensor_calibrate()` 直接返回 `ESP_ERR_NOT_SUPPORTED`（main/sensors/co2_sensor.c:123-130），与预热判定/手动校准场景完全脱节（openspec/specs/sensor-integration/spec.md:36-53）。用户以“阶段三再优化”为由暂缓实现，但规范要求这些接口已经存在，相关调用方目前只能拿到硬编码结果。
+
+## 测试与验证
+- 未提供新的自动化或硬件测试记录；建议修复后至少重新运行 `idf.py build` 并对 CO₂ 断线场景做一次实机验证，确认缓存值真的能推送给上层。
+
+---
+
 # 审查报告（2025-12-01 21:37 UTC+8, Codex）
 
 ## 结论

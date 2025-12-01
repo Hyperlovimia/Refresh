@@ -216,10 +216,14 @@ static void sensor_task(void *pvParameters) {
         // 读取传感器数据
         esp_err_t ret = sensor_manager_read_all(&data);
 
-        // 写入共享缓冲区
+        // 写入共享缓冲区（允许使用缓存数据）
+        // ret == ESP_FAIL 但 data.valid == true 表示使用了CO₂缓存值
         xSemaphoreTake(data_mutex, portMAX_DELAY);
-        if (ret == ESP_OK && data.valid) {
+        if (data.valid) {  // 只要数据有效就写入
             memcpy(&shared_sensor_data, &data, sizeof(SensorData));
+            if (ret == ESP_FAIL) {
+                ESP_LOGD(TAG, "写入共享数据（包含CO₂缓存值）");
+            }
         }
         xSemaphoreGive(data_mutex);
 

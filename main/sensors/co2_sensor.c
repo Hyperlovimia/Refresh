@@ -12,11 +12,12 @@
 
 static const char *TAG = "CO2_SENSOR";
 static bool s_uart_ready = false;
+static uint32_t s_init_time = 0;  // 初始化时间（秒）
 
 #define CO2_SENSOR_UART_NUM UART_NUM_2
 #define CO2_SENSOR_UART_TX  GPIO_NUM_17
 #define CO2_SENSOR_UART_RX  GPIO_NUM_16
-#define CO2_SENSOR_UART_BUF_SIZE 256
+#define CO2_SENSOR_UART_BUF_SIZE 1024  // 规格要求 1024 字节以容纳多帧
 
 esp_err_t co2_sensor_init(void) {
     if (s_uart_ready) {
@@ -57,6 +58,7 @@ esp_err_t co2_sensor_init(void) {
     }
 
     s_uart_ready = true;
+    s_init_time = xTaskGetTickCount() / configTICK_RATE_HZ;  // 记录初始化时间
     ESP_LOGI(TAG, "CO2 UART 初始化完成 GPIO16/17 9600 8N1");
     return ESP_OK;
 }
@@ -121,11 +123,55 @@ float co2_sensor_read_ppm(void) {
 }
 
 bool co2_sensor_is_ready(void) {
-    // TODO: 实现 - 检查传感器是否准备好
+    if (!s_uart_ready) {
+        return false;
+    }
+
+    // 计算从初始化到现在的时间（秒）
+    uint32_t elapsed = (xTaskGetTickCount() / configTICK_RATE_HZ) - s_init_time;
+
+    // 规格要求：预热 60 秒后可用，300 秒后完全稳定
+    // 这里使用 300 秒作为"就绪"标准
+    if (elapsed < 300) {
+        ESP_LOGD(TAG, "CO₂ 传感器预热中，已运行 %lu 秒（需要 300 秒）", elapsed);
+        return false;
+    }
+
     return true;
 }
 
 esp_err_t co2_sensor_calibrate(void) {
-    ESP_LOGW(TAG, "校准功能暂不支持");
-    return ESP_ERR_NOT_SUPPORTED;
+    if (!s_uart_ready) {
+        ESP_LOGE(TAG, "UART 未初始化");
+        return ESP_FAIL;
+    }
+
+    // 根据 JX-CO2-102 手册，手动校准命令
+    // 发送：FF 01 05 07 00 00 00 00 F4
+    // 接收：FF 01 03 07 01 00 00 00 F5（校准成功）
+    uint8_t cmd[9] = {0xFF, 0x01, 0x05, 0x07, 0x00, 0x00, 0x00, 0x00, 0xF4};
+
+    // 发送校准命令
+    int len = uart_write_bytes(CO2_SENSOR_UART_NUM, cmd, sizeof(cmd));
+    if (len != sizeof(cmd)) {
+        ESP_LOGE(TAG, "发送校准命令失败");
+        return ESP_FAIL;
+    }
+
+    // 等待响应（超时 2 秒）
+    uint8_t resp[9];
+    len = uart_read_bytes(CO2_SENSOR_UART_NUM, resp, sizeof(resp), pdMS_TO_TICKS(2000));
+    if (len != sizeof(resp)) {
+        ESP_LOGW(TAG, "未收到校准响应");
+        return ESP_ERR_TIMEOUT;
+    }
+
+    // 验证响应：FF 01 03 07 01 00 00 00 F5
+    if (resp[0] == 0xFF && resp[1] == 0x01 && resp[2] == 0x03 && resp[3] == 0x07 && resp[4] == 0x01) {
+        ESP_LOGI(TAG, "CO₂ 传感器校准成功");
+        return ESP_OK;
+    } else {
+        ESP_LOGW(TAG, "校准响应无效");
+        return ESP_FAIL;
+    }
 }

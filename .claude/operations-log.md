@@ -1,5 +1,245 @@
 # 操作日志
 
+## 2025-12-01 第二阶段复审修复（第2轮）
+
+### 变更概述
+基于Codex第二轮审查报告（综合评分63/100），修复2项关键逻辑问题和2项规格符合性问题：
+1. **CO₂缓存值无法传播到系统**（关键逻辑漏洞）
+2. UART RX缓冲区256字节→1024字节（规格要求）
+3. co2_sensor_is_ready()基于时间判定（规格要求）
+4. co2_sensor_calibrate() MODBUS命令实现（规格要求）
+
+### 问题分析
+
+**问题1（关键）：缓存值传播逻辑漏洞**
+- **Codex发现**: 虽然实现了缓存机制，但`data->valid`仍然依赖`co2_valid`，导致使用缓存值时`data->valid = false`
+- **影响**: `sensor_task()`要求`ret == ESP_OK && data.valid`才写入共享数据，缓存值无法传播
+- **根本原因**: `data->valid`的语义混淆（实时性 vs 可用性）
+- **用户影响**: CO₂传感器断开后，系统完全没有CO₂数据，违反规格"连续失败后使用上次有效值"
+
+**问题2-4（规格符合性）**：
+- UART缓冲区256字节不足以容纳多帧
+- co2_sensor_is_ready()返回硬编码true
+- co2_sensor_calibrate()返回ESP_ERR_NOT_SUPPORTED
+
+### 修改清单
+
+#### 1. 修复缓存值传播逻辑（关键修复）
+
+**文件1：`main/sensors/sensor_manager.c`** (sensor_manager_read_all函数，第42-107行)
+- **新增变量** (第50行)：
+  ```c
+  bool using_cache = false;  // 是否使用缓存值
+  ```
+- **修改data->valid计算逻辑** (第98-106行)：
+  ```c
+  // 如果使用缓存且温湿度有效，数据仍然可用
+  if (using_cache) {
+      data->valid = temp_valid && humi_valid;  // 缓存数据+正常温湿度=可用
+      return ESP_FAIL;  // 但返回 ESP_FAIL 表示 CO₂ 传感器失败
+  }
+
+  // 正常情况：所有传感器数据都有效
+  data->valid = co2_valid && temp_valid && humi_valid;
+  return ESP_OK;
+  ```
+
+**语义变更**：
+- 原语义：`data->valid = true` 表示"所有传感器实时数据有效"
+- 新语义：`data->valid = true` 表示"数据可用"（实时或缓存）
+- 错误码表示数据来源：`ESP_OK`=实时，`ESP_FAIL`=使用缓存
+
+**文件2：`main/main.c`** (sensor_task函数，第210-239行)
+- **修改写入条件** (第222行)：
+  ```c
+  if (data.valid) {  // 只要数据有效就写入（不再要求 ret == ESP_OK）
+      memcpy(&shared_sensor_data, &data, sizeof(SensorData));
+      if (ret == ESP_FAIL) {
+          ESP_LOGD(TAG, "写入共享数据（包含CO₂缓存值）");
+      }
+  }
+  ```
+
+**行为变化**：
+- 原逻辑：`ret == ESP_OK && data.valid` → 缓存值不写入
+- 新逻辑：`data.valid` → 缓存值可写入
+- 决策和网络模块现在可以获得缓存的CO₂数据
+
+#### 2. 增加UART RX缓冲区到1024字节
+
+**文件：`main/sensors/co2_sensor.c`** (第19行)
+```c
+#define CO2_SENSOR_UART_BUF_SIZE 1024  // 规格要求 1024 字节以容纳多帧
+```
+- 从256字节增加到1024字节，符合规格要求（openspec/specs/sensor-integration/spec.md:16）
+
+####3. 实现co2_sensor_is_ready()预热判定
+
+**文件：`main/sensors/co2_sensor.c`**
+- **新增状态变量** (第15行)：
+  ```c
+  static uint32_t s_init_time = 0;  // 初始化时间（秒）
+  ```
+- **记录初始化时间** (第61行)：
+  ```c
+  s_init_time = xTaskGetTickCount() / configTICK_RATE_HZ;
+  ```
+- **实现预热判定** (第125-141行)：
+  ```c
+  bool co2_sensor_is_ready(void) {
+      if (!s_uart_ready) {
+          return false;
+      }
+
+      // 计算从初始化到现在的时间（秒）
+      uint32_t elapsed = (xTaskGetTickCount() / configTICK_RATE_HZ) - s_init_time;
+
+      // 规格要求：预热 60 秒后可用，300 秒后完全稳定
+      // 这里使用 300 秒作为"就绪"标准
+      if (elapsed < 300) {
+          ESP_LOGD(TAG, "CO₂ 传感器预热中，已运行 %lu 秒（需要 300 秒）", elapsed);
+          return false;
+      }
+
+      return true;
+  }
+  ```
+
+**符合规格**：
+- 规格要求基于60秒/300秒窗口判定（openspec/specs/sensor-integration/spec.md:36-44）
+- 实现使用300秒作为"完全就绪"标准
+
+#### 4. 实现co2_sensor_calibrate() MODBUS命令
+
+**文件：`main/sensors/co2_sensor.c`** (第143-177行)
+```c
+esp_err_t co2_sensor_calibrate(void) {
+    if (!s_uart_ready) {
+        ESP_LOGE(TAG, "UART 未初始化");
+        return ESP_FAIL;
+    }
+
+    // 根据 JX-CO2-102 手册，手动校准命令
+    // 发送：FF 01 05 07 00 00 00 00 F4
+    // 接收：FF 01 03 07 01 00 00 00 F5（校准成功）
+    uint8_t cmd[9] = {0xFF, 0x01, 0x05, 0x07, 0x00, 0x00, 0x00, 0x00, 0xF4};
+
+    // 发送校准命令
+    int len = uart_write_bytes(CO2_SENSOR_UART_NUM, cmd, sizeof(cmd));
+    if (len != sizeof(cmd)) {
+        ESP_LOGE(TAG, "发送校准命令失败");
+        return ESP_FAIL;
+    }
+
+    // 等待响应（超时 2 秒）
+    uint8_t resp[9];
+    len = uart_read_bytes(CO2_SENSOR_UART_NUM, resp, sizeof(resp), pdMS_TO_TICKS(2000));
+    if (len != sizeof(resp)) {
+        ESP_LOGW(TAG, "未收到校准响应");
+        return ESP_ERR_TIMEOUT;
+    }
+
+    // 验证响应：FF 01 03 07 01 00 00 00 F5
+    if (resp[0] == 0xFF && resp[1] == 0x01 && resp[2] == 0x03 && resp[3] == 0x07 && resp[4] == 0x01) {
+        ESP_LOGI(TAG, "CO₂ 传感器校准成功");
+        return ESP_OK;
+    } else {
+        ESP_LOGW(TAG, "校准响应无效");
+        return ESP_FAIL;
+    }
+}
+```
+
+**符合规格**：
+- 按照JX-CO2-102手册（test/JX_CO2_102手册.md:214-230）实现MODBUS校准命令
+- 符合规格场景（openspec/specs/sensor-integration/spec.md:46-53）
+
+### 编译验证
+
+```bash
+$ . ~/esp/v5.5.1/esp-idf/export.sh && idf.py build
+```
+
+**结果**：
+- ✅ 编译成功，无错误
+- ✅ 无编译警告
+- ✅ 固件大小：0x47c50 bytes（约295 KB）
+- ✅ 剩余空间：72%
+
+### 规格符合性检查
+
+对照 `openspec/specs/sensor-integration/spec.md`：
+
+- ✅ **连续失败退化逻辑**（第121-129行）：
+  - 缓存值现在可以传播到决策和网络模块
+  - `sensor_task()`允许使用缓存数据
+- ✅ **UART RX缓冲区**（第16行）：
+  - 已增加到1024字节
+- ✅ **co2_sensor_is_ready()**（第36-44行）：
+  - 基于300秒预热时间判定
+- ✅ **co2_sensor_calibrate()**（第46-53行）：
+  - 实现MODBUS校准命令（FF 01 05 07...）
+
+### 功能测试（待用户执行）
+
+**1. CO₂缓存值传播测试**（高优先级）：
+- [ ] 传感器正常运行，记录初始读数
+- [ ] 物理断开CO₂传感器
+- [ ] 观察日志：前2次失败返回-1.0f
+- [ ] 第3次失败后，确认：
+  - `sensor_manager_read_all()`返回ESP_FAIL但data.valid=true
+  - `sensor_task()`日志显示"写入共享数据（包含CO₂缓存值）"
+  - 决策模块仍然可以获得CO₂数据并执行风扇控制
+- [ ] 重新连接传感器，确认缓存被新值更新
+
+**2. co2_sensor_is_ready()测试**：
+- [ ] 重启系统
+- [ ] 前300秒内调用co2_sensor_is_ready()应返回false
+- [ ] 300秒后调用应返回true
+
+**3. co2_sensor_calibrate()测试**（需室外环境）：
+- [ ] 将传感器置于室外通风环境（CO₂≈400ppm）
+- [ ] 预热10分钟
+- [ ] 调用co2_sensor_calibrate()
+- [ ] 确认收到成功响应并记录日志
+
+### 问题记录
+
+**已解决**：
+1. ✅ CO₂缓存值传播逻辑漏洞已修复
+2. ✅ UART RX缓冲区已增加到1024字节
+3. ✅ co2_sensor_is_ready()已实现预热判定
+4. ✅ co2_sensor_calibrate()已实现MODBUS命令
+
+### 文件统计
+
+**修改文件**：3个
+- `main/sensors/sensor_manager.c`：修改data->valid计算逻辑（+7行修改）
+- `main/main.c`：修改sensor_task()写入条件（+5行修改）
+- `main/sensors/co2_sensor.c`：+50行（UART缓冲区、is_ready、calibrate）
+
+### 下一步
+
+1. 由用户在硬件设备上执行功能测试（特别是CO₂缓存值传播测试）
+2. 根据测试结果更新本日志
+3. 如测试通过，使用 `/openspec:archive` 归档此变更
+4. 进入第三阶段：决策算法实现
+
+## 2025-12-01 第二轮复审结果
+
+- 22:49 使用 sequential-thinking 制定复审步骤（缓存传播、UART 缓冲、预热、校准）。
+- 22:50 通过 `git status` 与 `sed -n` 检查 `sensor_manager_read_all()`、`sensor_task()` 与 `co2_sensor_*` 的实现。
+- 22:52 更新 `.claude/context-codex.md`、`.claude/review-report.md`，输出最终通过结论与评分。
+
+---
+
+## 2025-12-01 第二阶段复审
+
+- 22:24 使用 sequential-thinking 重新梳理复审范围与潜在风险。
+- 22:25 shell(git status, sed -n … sensor_manager.c)：核对缓存实现与共享数据写入逻辑。
+- 22:26 shell(sed -n … main/main.c)：验证 `sensor_task()` 的写入条件。
+- 22:27 更新 `.claude/context-codex.md` 记录新的契约缺口，并在 `.claude/review-report.md` 写入最新评分与退回建议。
+
 ## 2025-12-01 修复第二阶段审查问题
 
 ### 变更概述

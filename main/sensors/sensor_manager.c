@@ -47,6 +47,7 @@ esp_err_t sensor_manager_read_all(SensorData *data) {
     // 读取 CO2
     float co2_value = co2_sensor_read_ppm();
     bool co2_valid = (co2_value >= CO2_MIN_VALID && co2_value <= CO2_MAX_VALID);
+    bool using_cache = false;  // 是否使用缓存值
 
     // 如果 CO₂ 读取失败，尝试使用缓存值
     if (!co2_valid) {
@@ -57,6 +58,7 @@ esp_err_t sensor_manager_read_all(SensorData *data) {
         if (failure_count >= 3 && has_valid_cache) {
             ESP_LOGW(TAG, "使用缓存的 CO₂ 值：%.1f ppm", last_valid_co2);
             data->co2 = last_valid_co2;
+            using_cache = true;  // 标记使用缓存
         } else {
             data->co2 = co2_value;  // 使用无效值（-1.0f）
         }
@@ -92,13 +94,15 @@ esp_err_t sensor_manager_read_all(SensorData *data) {
     // 数据有效性检查
     bool temp_valid = (data->temperature >= TEMP_MIN_VALID && data->temperature <= TEMP_MAX_VALID);
     bool humi_valid = (data->humidity >= HUMI_MIN_VALID && data->humidity <= HUMI_MAX_VALID);
-    data->valid = co2_valid && temp_valid && humi_valid;
 
-    // 如果 CO₂ 失败但使用了缓存值，返回 ESP_FAIL 但数据部分有效
-    if (!co2_valid) {
-        return ESP_FAIL;
+    // 如果使用缓存且温湿度有效，数据仍然可用
+    if (using_cache) {
+        data->valid = temp_valid && humi_valid;  // 缓存数据+正常温湿度=可用
+        return ESP_FAIL;  // 但返回 ESP_FAIL 表示 CO₂ 传感器失败
     }
 
+    // 正常情况：所有传感器数据都有效
+    data->valid = co2_valid && temp_valid && humi_valid;
     return ESP_OK;
 }
 

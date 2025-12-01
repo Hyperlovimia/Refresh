@@ -47,3 +47,32 @@
 - I2C 锁在 `sensor_manager_read_all()` 和 `oled_display_*` 中被调用，证实互斥保护已经补齐。
 - MQTT 发布频率修正为 `MQTT_PUBLISH_INTERVAL_SEC` 节拍，但 `wifi_manager_is_connected()` 仍是桩函数，后续需要结合真实连接状态测试。
 - 多个模块（co2_sensor/decision_engine/local_mode）仍输出 “??” 字符，说明阶段 4 的编码修复并未覆盖全部文件，仍需整改。
+# Codex 分析上下文（2025-12-01 22:28 UTC+8, Codex）
+
+## 接口契约
+- `sensor_manager_read_all()` 虽然新增了 `last_valid_co2` 缓存，但 `data->valid` 仍然直接等于 `co2_valid && temp_valid && humi_valid`（main/sensors/sensor_manager.c:47-100），且 `sensor_task()` 只有在 `ret == ESP_OK && data.valid` 时才更新共享缓冲区（main/main.c:221-223）。因此当连续失败 3 次并使用缓存值时，`data.valid` 依旧为 false、返回值是 `ESP_FAIL`，上层根本拿不到缓存数据，无法满足“继续推送上次有效数据”的场景（openspec/specs/sensor-integration/spec.md:121-128）。
+- `co2_sensor_init()` 仍只分配 256 字节 RX 缓冲（main/sensors/co2_sensor.c:53-56），与规格中“分配 1024 字节”要求冲突（openspec/specs/sensor-integration/spec.md:10-17）。
+
+## 边界条件
+- `co2_sensor_is_ready()` / `co2_sensor_calibrate()` 依旧是桩实现（main/sensors/co2_sensor.c:123-130），无法按规格提供预热就绪判定或 MODBUS 校准（openspec/specs/sensor-integration/spec.md:36-53）。阶段二状态机目前靠固定 60s/300s 计时运行，但只要其他模块调用这些接口就会拿到错误结果。
+
+## 风险评估
+- 传感器缓存值未能写入 `shared_sensor_data`，决策任务依然看不到 CO₂ 读数，一旦真实传感器断开系统会一直停留在旧数据（甚至 0）。结合错误恢复逻辑，容易导致系统长时间没有有效 CO₂ 数据却无法发出新告警。
+
+## 技术建议
+1. 在退化路径中引入 `bool co2_usable = co2_valid || (failure_count >= 3 && has_valid_cache)`，据此设置 `data->valid` 并允许 `sensor_task()` 在返回 `ESP_FAIL` 时继续写入共享缓冲区（可通过额外标志区分“缓存数据”与“实时数据”）。
+2. 将 UART RX 缓冲区扩展为 1024 字节并实现 `co2_sensor_is_ready()` / `co2_sensor_calibrate()`，避免接口继续返回硬编码值。
+
+# Codex 分析上下文（2025-12-01 21:37 UTC+8, Codex）
+# Codex 分析上下文（2025-12-01 22:53 UTC+8, Codex）
+
+## 接口契约
+- `sensor_manager_read_all()` 现在通过 `using_cache` 标记确保 CO₂ 连续失败 ≥3 次时仍返回缓存值，并在温湿度有效时令 `data->valid` 为 true ，同时用返回值 `ESP_FAIL` 提示退化状态（main/sensors/sensor_manager.c:47-105）；`sensor_task()` 也改成只要 `data.valid` 就写入共享缓冲区，即使 `ret == ESP_FAIL`（main/main.c:210-227），满足规格“缓存值必须继续提供给系统使用”的场景（openspec/specs/sensor-integration/spec.md:121-128）。
+- `co2_sensor_init()` 将 UART RX 缓冲扩展到 1024 字节，并在初始化完记录 `s_init_time`（main/sensors/co2_sensor.c:13-63），`co2_sensor_is_ready()` 基于 `xTaskGetTickCount()` 计算初始化后经过的秒数，未满 300 秒一律返回 false（main/sensors/co2_sensor.c:125-140），满足预热窗口判定。
+- `co2_sensor_calibrate()` 已实现 JX-CO2-102 的 MODBUS 指令发送与响应校验（main/sensors/co2_sensor.c:143-177），符合集成规格的校准场景。
+
+## 边界条件
+- 传感器退化时 `data->valid` 依赖温湿度范围，因此若 I2C 数据正常即可保持 UI/决策可用；同时函数返回 `ESP_FAIL`，外部可以据此区分缓存状态（main/sensors/sensor_manager.c:98-105）。
+
+## 风险评估
+- `co2_sensor_is_ready()` 基于初始化时间戳，只要驱动没有重新安装就会沿用首次启动的计数；若未来需要在重新上电后重新计时，需要在 `co2_sensor_reinit()` 中显式复位 `s_uart_ready` 或提供单独的时间复位接口。
