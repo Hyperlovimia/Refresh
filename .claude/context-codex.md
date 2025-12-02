@@ -1,3 +1,23 @@
+# Codex 分析上下文（2025-12-02 22:02 UTC+8, Codex）
+
+## 接口契约
+- 规格 `openspec/specs/decision-algorithm/spec.md:36-119` 要求“中等收益场景”必须落在 `1.0 < index <= 3.0` 并返回 `FAN_LOW`，但设计/任务沿用权重 10/5/2 与阈值 3.0/1.0（openspec/changes/implement-benefit-cost-algorithm/design.md:25-109, openspec/changes/implement-benefit-cost-algorithm/tasks.md:16-87），计算结果始终是 `index = 0.5`，没有任何调整方案，无法兑现规格。
+- Task3 的 `test_medium_benefit` 直接写成“返回 FAN_OFF(实际)或 FAN_LOW(调整后)”（openspec/changes/implement-benefit-cost-algorithm/tasks.md:112-132），意味着实施阶段没有确定性的断言，测试无法捕捉权重/阈值偏差。
+
+## 边界条件
+- Delta 规格宣称归一化输出位于 `[0, 1]`（openspec/changes/implement-benefit-cost-algorithm/specs/decision-algorithm/spec.md:17-138），但提案中公式没有任何 clamp 逻辑；当 CO₂ >2000 ppm 或 <400 ppm 时，`indoor_quality` 会超出范围并破坏“收益=质量×10”的假设，需要在规格或实现中明确边界处理。
+
+## 风险评估
+- 未解决的权重/阈值冲突会导致实现永远达不到“中等收益→FAN_LOW”的验收条件，而模糊测试会让缺陷溜过代码审查，直到系统上线才被用户发现。
+
+## 技术建议
+1. 在规格或设计中正式给出一组满足三种场景的权重/阈值，并同步更新常量与单测预期。
+2. 若暂时无法推导出合适权重，需写明如何处理 index=0.5 的场景（例如调低 `VENTILATION_INDEX_LOW`），同时修正测试与日志断言。
+3. 对归一化结果增加 clamp 或明确定义“当输入超出范围时如何处理”，避免无界值影响指数。
+
+## 观察报告
+- Delta 规格除了重复原有三个场景外仅添加“天气数据无效/传感器无效”两个场景（openspec/changes/implement-benefit-cost-algorithm/specs/decision-algorithm/spec.md:140-175），但实现计划并未描述 MODE_DEGRADED 的缓存策略；需要确认这种“直接降级为 local mode”行为是否符合既有系统模式设计。
+
 # Codex 分析上下文（2025-12-01 21:37 UTC+8, Codex）
 
 ## 接口契约

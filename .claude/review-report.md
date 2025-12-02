@@ -1,3 +1,26 @@
+# 审查报告（2025-12-02 22:02 UTC+8, Codex）
+
+## 结论
+- 建议：**退回**（关键算法参数与验证策略无法满足规格）
+- 技术评分：62 / 100
+- 战略评分：58 / 100
+- 综合评分：60 / 100
+
+## 评估结果
+1. **权重/阈值方案无法满足“中等收益 → FAN_LOW”场景（高）**  
+   - `decision-algorithm` 规格明确要求 1200 ppm / 50 µg/m³ / 1℃ 这个场景必须得到 `1.0 < index ≤ 3.0` 并返回 `FAN_LOW`（openspec/specs/decision-algorithm/spec.md:36-93）。  
+   - 提案与设计仍沿用 `benefit = indoor_quality × 10`、`cost = outdoor_quality × 5 + temp_diff × 2`、阈值 3.0/1.0（openspec/changes/implement-benefit-cost-algorithm/design.md:25-109, openspec/changes/implement-benefit-cost-algorithm/tasks.md:16-87），计算结果固定为 index=0.5，无法进入 FAN_LOW 区间，也没有任何权重/阈值调整计划。
+
+2. **单元测试没有确定性的断言（中）**  
+   - Task3 中的 `test_medium_benefit` 直接写成“返回 FAN_OFF(实际)或 FAN_LOW(调整后)”（openspec/changes/implement-benefit-cost-algorithm/tasks.md:112-132），意味着无论实现输出什么状态测试都能通过，无法帮助捕捉上述规格缺口。
+
+3. **Delta 规格与运行模式契约矛盾（中）**  
+   - 运行模式检测要求 WiFi 断开且缓存过期 (>30 min) 时进入 `MODE_LOCAL`（openspec/specs/decision-algorithm/spec.md:6-27）。  
+   - Delta 新增的“天气数据无效”场景却写成 `MODE_DEGRADED` 且 `weather->valid == false`、网络断开 >30 分钟（openspec/changes/implement-benefit-cost-algorithm/specs/decision-algorithm/spec.md:140-155），这是自相矛盾的状态描述，会让实现无所适从。
+
+## 测试与验证
+- 未执行；在权重和规格矛盾解决之前，单元测试也需要重新编写以提供有效断言。
+
 # 审查报告（2025-12-01 22:53 UTC+8, Codex）
 
 ## 结论
