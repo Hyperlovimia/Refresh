@@ -4,7 +4,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: 完整决策算法(Benefit-Cost 模型)
+### Requirement: 完整决策算法（Benefit-Cost 模型）
 
 决策引擎在 MODE_NORMAL 和 MODE_DEGRADED 模式下,MUST 使用完整的 Benefit-Cost 模型计算通风指数并决定风扇状态。
 

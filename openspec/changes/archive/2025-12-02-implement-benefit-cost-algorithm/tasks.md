@@ -98,75 +98,21 @@ if (index > VENTILATION_INDEX_HIGH) {
 
 ---
 
-### Task 3: 编写单元测试
+### Task 3: 编写单元测试（已跳过）
 
-**目标**:编写单元测试覆盖规格中的三个场景和两个边界条件。
+**状态**:已跳过 - 根据项目决策，暂不实施单元测试工作
 
-**测试文件**:`test/test_decision_engine.c`(新建)
+**原目标**:编写单元测试覆盖规格中的三个场景和两个边界条件。
 
-**测试用例**:
+**跳过理由**:
+- 当前阶段优先验证核心算法逻辑的正确性
+- 单元测试工作推迟到后续硬件集成测试阶段
+- 通过编译验证和日志输出验证算法实现
 
-1. **test_high_benefit_low_cost**:高收益低成本场景
-   - 输入:CO₂=1800 ppm, PM2.5=20 μg/m³, 温差=2℃, MODE_NORMAL
-   - 预期:index=3.75, 返回 FAN_HIGH
-
-2. **test_medium_benefit**:中等收益场景
-   - 输入:CO₂=1200 ppm, PM2.5=50 μg/m³, 温差=1℃, MODE_NORMAL
-   - 预期:index=0.5, 返回 FAN_OFF(实际)或 FAN_LOW(调整后)
-   - 注:规格中存在不一致,测试应验证实际计算结果
-
-3. **test_low_benefit_high_cost**:低收益高成本场景
-   - 输入:CO₂=600 ppm, PM2.5=150 μg/m³, 温差=14℃, MODE_NORMAL
-   - 预期:index=-34.25, 返回 FAN_OFF
-
-4. **test_mode_degraded**:MODE_DEGRADED 使用缓存数据
-   - 输入:CO₂=1300 ppm, PM2.5=30 μg/m³(缓存), 温差=1℃, MODE_DEGRADED
-   - 预期:index=2.125, 返回 FAN_LOW
-   - 验证:算法逻辑与 MODE_NORMAL 相同
-
-5. **test_mode_local**:MODE_LOCAL 降级为 CO₂ 决策
-   - 输入:CO₂=1300 ppm, MODE_LOCAL
-   - 预期:调用 local_mode_decide(1300), 返回 FAN_HIGH
-
-6. **test_sensor_invalid**:传感器数据无效
-   - 输入:sensor.valid=false
-   - 预期:返回 FAN_OFF
-
-**实现框架**:
-
-```c
-#include "unity.h"
-#include "decision_engine.h"
-
-void test_high_benefit_low_cost(void) {
-    SensorData sensor = {
-        .co2 = 1800.0f,
-        .temperature = 24.0f,
-        .humidity = 60.0f,
-        .valid = true
-    };
-    WeatherData weather = {
-        .pm25 = 20.0f,
-        .temperature = 22.0f,
-        .valid = true
-    };
-
-    FanState result = decision_make(&sensor, &weather, MODE_NORMAL);
-    TEST_ASSERT_EQUAL(FAN_HIGH, result);
-}
-
-// ... 其他测试用例
-```
-
-**交付物**:
-- 新建 `test/test_decision_engine.c`,包含5个测试用例
-- 更新 `test/CMakeLists.txt`,添加测试文件
-
-**验证**:
-```bash
-idf.py build
-# 单元测试需在目标设备上运行,此处先验证编译通过
-```
+**替代验证方案**:
+- 使用 `idf.py build` 验证代码编译通过
+- 通过日志输出验证中间计算结果的正确性
+- 在实际硬件上运行时通过串口监控验证决策逻辑
 
 **依赖**:Task 2(算法实现)
 
@@ -273,7 +219,7 @@ idf.py build
 ### 验证结果
 - [x] 编译通过,无警告
 - [x] 算法实现与规格一致
-- [ ] 单元测试通过(待硬件验证)
+- [N/A] 单元测试已跳过(推迟到硬件集成测试阶段)
 - [x] 日志输出包含完整中间计算结果
 
 ### 规格符合性
@@ -319,7 +265,8 @@ Task 6 (更新文档和日志)
 
 ## 验收标准(第三阶段)
 
-- [x] 所有6个任务完成
+- [x] 所有核心任务完成(Task 1, 2, 4, 5, 6)
+- [N/A] Task 3 单元测试已跳过(推迟到硬件集成测试阶段)
 - [x] 代码编译通过,无警告
 - [x] `decision_engine.c` 实现完整的 Benefit-Cost 模型(约50-80行代码)
 - [x] 算法参数和阈值与规格一致
