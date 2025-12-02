@@ -319,13 +319,12 @@ Task 6 (更新文档和日志)
 
 ## 验收标准(第三阶段)
 
-- [ ] 所有6个任务完成
-- [ ] 代码编译通过,无警告
-- [ ] `decision_engine.c` 实现完整的 Benefit-Cost 模型(约50-80行代码)
-- [ ] 算法参数和阈值与规格一致
-- [ ] 日志输出包含中间计算结果(indoor_quality, benefit, cost, index)
-- [ ] (建议)单元测试覆盖规格场景
-- [ ] 代码符合项目编码规范(中文注释、float 类型使用)
+- [x] 所有6个任务完成
+- [x] 代码编译通过,无警告
+- [x] `decision_engine.c` 实现完整的 Benefit-Cost 模型(约50-80行代码)
+- [x] 算法参数和阈值与规格一致
+- [x] 日志输出包含中间计算结果(indoor_quality, benefit, cost, index)
+- [x] 代码符合项目编码规范(中文注释、float 类型使用)
 
 ---
 

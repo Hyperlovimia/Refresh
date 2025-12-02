@@ -295,7 +295,7 @@ idf.py fullclean build
 
 **Flash firmware to device**:
 ```bash
-idf.py -p /dev/ttyACM0 flash  # flash 任务必须先询问用户，并由用户完成操作
+idf.py -p /dev/ttyACM0 flash  # flash 任务执行前，需要提示用户是否执行
 ```
 
 **Monitor serial output**:

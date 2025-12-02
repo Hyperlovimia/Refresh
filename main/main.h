@@ -98,6 +98,24 @@ typedef struct {
 #define MQTT_PUBLISH_INTERVAL_SEC 30    ///< MQTT 状态上报间隔（秒）
 #define WEATHER_FETCH_INTERVAL_SEC 600  ///< 天气数据获取间隔（秒，10分钟）
 
+// ============================================================================
+// Benefit-Cost 决策算法常量
+// ============================================================================
+
+// 归一化基准值
+#define CO2_BASELINE  400.0f   ///< CO₂ 基准浓度(ppm,室外标准)
+#define CO2_RANGE     1600.0f  ///< CO₂ 归一化范围(400-2000ppm)
+#define PM25_RANGE    100.0f   ///< PM2.5 归一化范围(μg/m³)
+
+// Benefit-Cost 模型权重系数
+#define VENTILATION_BENEFIT_WEIGHT   10.0f  ///< 收益权重系数(CO₂)
+#define VENTILATION_PM25_COST_WEIGHT  5.0f  ///< PM2.5 成本权重系数
+#define VENTILATION_TEMP_COST_WEIGHT  2.0f  ///< 温差成本权重系数
+
+// 决策阈值
+#define VENTILATION_INDEX_HIGH  3.0f  ///< 高速风扇阈值
+#define VENTILATION_INDEX_LOW   1.0f  ///< 低速风扇阈值
+
 // 任务优先级定义
 #define TASK_PRIORITY_MAIN      4       ///< 主任务优先级（最高）
 #define TASK_PRIORITY_SENSOR    3       ///< 传感器任务优先级

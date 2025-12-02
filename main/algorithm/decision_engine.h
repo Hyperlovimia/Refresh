@@ -10,17 +10,30 @@
 #include <stdbool.h>
 
 /**
- * @brief 决策风扇状态 ( Benefit-Cost 分析 )
- *   Benefit = CO2 改善潜力
- *   Cost = PM2.5 污染成本
- *   Index = Benefit - Cost
- *   Index > 3.0 -> FAN_HIGH
- *   Index > 1.0 -> FAN_LOW
- *   Index <= 1.0 -> FAN_OFF
- * @param sensor 传感器数据
- * @param weather 天气数据
- * @param mode 系统模式
- * @return 风扇状态 OFF/LOW/HIGH
+ * @brief 决策风扇状态(Benefit-Cost 分析)
+ *
+ * 算法流程:
+ * 1. 检查传感器和系统模式,处理异常情况
+ * 2. 归一化室内外质量指数(CO₂、PM2.5)
+ * 3. 计算收益(CO₂ 改善潜力)和成本(PM2.5 污染+温差损失)
+ * 4. 根据通风指数决策风扇状态
+ *
+ * 算法公式:
+ *   indoor_quality = (co2 - 400) / 1600
+ *   outdoor_quality = pm25 / 100
+ *   benefit = indoor_quality × 10
+ *   cost = outdoor_quality × 5 + temp_diff × 2
+ *   index = benefit - cost
+ *
+ * 决策规则:
+ *   index > 3.0 → FAN_HIGH (高收益低成本,强制通风)
+ *   1.0 < index ≤ 3.0 → FAN_LOW (中等收益,适度通风)
+ *   index ≤ 1.0 → FAN_OFF (低收益高成本,停止通风)
+ *
+ * @param sensor 传感器数据(CO₂、温度、湿度)
+ * @param weather 天气数据(PM2.5、室外温度)
+ * @param mode 系统运行模式
+ * @return FanState 风扇状态(OFF/LOW/HIGH)
  */
 FanState decision_make(SensorData *sensor, WeatherData *weather, SystemMode mode);
 
