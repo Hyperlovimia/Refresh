@@ -1,43 +1,40 @@
-# 审查报告 — implement-network-services 提案
-日期：2025-12-03 12:00 (UTC+8)  
+# 审查报告 — 网络服务实现交付
+日期：2025-12-03 15:24 (UTC+8)  
 审查人：Codex
 
 ## 结论
-- 综合评分：62/100  
-- 建议：需讨论（存在跨文档冲突与实现风险，需在审批前澄清）
+- 综合评分：45/100  
+- 建议：需讨论（存在多处与规格/文档不符的缺陷，需补齐功能后再确认验收）
 
 ## 技术维度评分
-- 设计完整性：65 — 架构路径清晰，但 WiFi/MQTT 细节与规范冲突。
-- 可实现性：60 — 任务拆分细致，却遗漏 `SystemMode` 传递、TLS 证书配置等关键点。
-- 测试计划：55 — 提及集成测试，但未覆盖规范强调的失败场景（WiFi 重试上限、MQTT 断线处理边界）。
+- 代码正确性：45 — WiFi 事件处理阻塞系统事件循环，天气数据字段缺失，MQTT 告警路径不完整。
+- 需求符合度：40 — menuconfig WiFi 配置、SmartConfig 触发、告警发布等关键需求未落地。
+- 测试与可验证性：50 — 有日志描述，但缺乏针对上述缺陷的验证或测试记录。
 
 ## 战略维度评分
-- 需求匹配：60 — 覆盖 WiFi/天气/MQTT 的核心需求，但 payload 字段、命令订阅等与现有系统/规格不一致。
-- 风险识别：70 — 文件列出了主要风险，不过漏掉接口契约冲突。
+- 需求匹配：45 — README/配置指南宣称的能力（手动配网、CO₂ 告警等）与实现不符。
+- 风险识别：55 — 代码包含一定日志/降级逻辑，但对事件阻塞、功能缺失未做任何防护。
 
 ## 主要发现
-1. **WiFi 失败重试语义与规范冲突**  
-   - 规范 `openspec/changes/implement-network-services/specs/network-services/spec.md:41-49` 明确 `wifi_manager_init()` 在连接失败时需等待 5 秒、重试 3 次，三次失败后返回 `ESP_FAIL`。  
-   - 设计 `design.md:57-60`、成功标准 `proposal.md:124-125` 改为 10 秒间隔无限重试，并未说明何时返回失败。  
-   - `main/main.c:440-451` 依赖 `wifi_manager_init()` 的返回值打印警告；若永不返回失败，系统无法得知初始化异常。需重新对齐重试策略或同步更新规范。
+1. **menuconfig WiFi 配置完全无效**  
+   - 实现仅尝试从 NVS 读取凭据并提示“请调用 wifi_manager_start_provisioning()”，无任何 `CONFIG_WIFI_*` 读取逻辑（`main/network/wifi_manager.c:222-257`）。  
+   - README 与配置指南却指导用户在 menuconfig 中填写 SSID/密码（`README.md:184-213`、`openspec/changes/implement-network-services/configuration-guide.md:248-273`），导致文档所述方式无法生效。
 
-2. **MQTT 状态消息缺少 `mode` 数据路径**  
-   - 规范示例及接口注释要求 payload 含 `mode` 字段（`spec.md:163-178`、`main/network/mqtt_client.h:20-35`），但 `mqtt_publish_status()` 仅接收 `SensorData` 与 `FanState`，调用点 `main/main.c:328-347` 也没有系统模式参数。  
-   - 设计/任务并未要求扩展 API 或提供 `SystemMode` 访问方法，因此无法生成符合规范的 JSON。需在提案中明确如何传递运行模式。
+2. **SmartConfig 无触发路径**  
+   - `wifi_manager_start_provisioning()` 只在 `main/network/wifi_manager.c:263-311` 定义，整个代码库没有任何调用点；系统启动后仅打印“请调用 … 进行配网”（`main/network/wifi_manager.c:253-257`），无法真正进入 SmartConfig 流程。
 
-3. **MQTT 断线重连计划会阻塞事件回调**  
-   - 任务 3.5（`openspec/changes/implement-network-services/tasks.md:125-129`）打算在 `mqtt_event_handler()` 里“等待 30 秒后自动重连”。  
-   - MQTT 事件回调运行于 esp-mqtt 任务上下文，阻塞 30 秒会卡住整条 MQTT 状态机，导致其它事件（如 PUBLISH ack）无法处理。应改为在回调里投递工作给独立任务或定时器。
+3. **WiFi 事件处理阻塞系统事件循环**  
+   - 在 `WIFI_EVENT_STA_DISCONNECTED` 分支中直接调用 `vTaskDelay(pdMS_TO_TICKS(5000/10000))`（`main/network/wifi_manager.c:61-85`），此回调运行在 ESP 事件循环/驱动上下文，会暂停所有后续 WiFi/IP/SmartConfig 事件 5~10 秒，违反 ESP-IDF 不可阻塞事件处理器的约定。
 
-4. **设计声明“不实现 MQTT 订阅”但规范仍要求订阅命令主题**  
-   - 设计明确非目标为“不实现 MQTT 订阅和远程控制”（`design.md:33-35`），然而规范场景 `spec.md:151-161` 仍要求在初始化时订阅 `home/ventilation/command`。  
-   - 若确实暂不实现订阅，则需要更新规范/Success Criteria；若要满足规范，则需在任务和实施计划中补充订阅及消息处理逻辑。
+4. **天气 API 未按规格解析温度/风速**  
+   - 解析函数只读取 PM2.5，并写死温度 20℃ / 风速 0（`main/network/weather_api.c:88-103`），与任务要求“提取 `now->temp`、`now->windSpeed` 字段”不符（`openspec/changes/implement-network-services/tasks.md:61-88`），会导致决策算法始终使用伪造数据。
 
-## 残留问题 / 建议讨论
-- WiFi 重试行为需决策：保持规范的 3 次同步重试，还是明确 `wifi_manager_init()` 立即返回并在后台无限重试？
-- MQTT 状态 payload 的 `mode` 应如何获取？是否需要拓展 API 或在 `mqtt_publish_status` 内部读取新的全局状态接口？
-- MQTT 命令订阅是否属于此次交付范围？若不是，需在 spec delta 中调整 MODIFIED 场景。
+5. **MQTT 告警发布缺失（仅 UI 告警）**  
+   - `sensor_task` 将 CO₂ 告警写入本地队列（`main/main.c:210-235`），`network_task` 仅周期性调用 `mqtt_publish_status()`（`main/main.c:327-342`），而 `mqtt_publish_alert()` 仅在传感器故障时调用（`main/main.c:164-177`）。  
+   - README 明确宣称 CO₂>1500 ppm 会推送 `home/ventilation/alert`（`README.md:203-213`），但实际实现从未向 MQTT 告警主题发布空气质量告警。
 
-## 待验证事项
-- `esp_crt_bundle_attach` 依赖的 `CONFIG_MBEDTLS_CERTIFICATE_BUNDLE*` 选项是否已在配置计划中体现。
-- SmartConfig 触发流程：系统如何在缺省凭据时触发 `wifi_manager_start_provisioning()`，是否需要按键/命令支持。
+## 残留风险与建议
+- menuconfig/SmartConfig 功能需决定真实使用方式：若继续依赖 SmartConfig，应删除无效配置项并补充触发接口；若要支持手动配置，则必须读取 `CONFIG_WIFI_*` 并在缺省时写入 NVS。
+- WiFi 事件重试逻辑应迁移到定时器或独立任务，避免阻塞 ESP 事件循环。
+- 天气 API 应补齐温度/风速字段解析，或更新规格/决策逻辑以避免使用固定值。
+- 需要一条明确的告警→MQTT 发布链路（可复用现有 `alert_queue`），并补充对应测试/日志。
