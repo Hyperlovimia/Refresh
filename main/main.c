@@ -19,7 +19,7 @@
 #include "algorithm/decision_engine.h"
 #include "network/wifi_manager.h"
 #include "network/weather_api.h"
-#include "network/mqtt_client.h"
+#include "network/mqtt_wrapper.h"
 #include "ui/oled_display.h"
 
 // ============================================================================
@@ -334,7 +334,7 @@ static void network_task(void *pvParameters) {
                     xSemaphoreGive(data_mutex);
 
                     // 发布状态
-                    esp_err_t ret = mqtt_publish_status(&sensor, fan);
+                    esp_err_t ret = mqtt_publish_status(&sensor, fan, current_mode);
                     if (ret != ESP_OK) {
                         ESP_LOGW(TAG, "MQTT 状态发布失败");
                     }

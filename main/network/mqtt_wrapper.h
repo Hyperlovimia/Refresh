@@ -1,10 +1,10 @@
 /**
- * @file mqtt_client.h
- * @brief MQTT 客户端接口定义 - EMQX Cloud TLS 版本
+ * @file mqtt_wrapper.h
+ * @brief MQTT 客户端包装接口定义 - EMQX Cloud TLS 版本
  */
 
-#ifndef MQTT_CLIENT_H
-#define MQTT_CLIENT_H
+#ifndef MQTT_WRAPPER_H
+#define MQTT_WRAPPER_H
 
 #include "esp_err.h"
 #include "main.h"
@@ -30,9 +30,10 @@ esp_err_t mqtt_client_init(void);
  * QoS: 0
  * @param sensor 传感器数据
  * @param fan 风扇状态
+ * @param mode 系统运行模式
  * @return ESP_OK 成功，ESP_FAIL 失败
  */
-esp_err_t mqtt_publish_status(SensorData *sensor, FanState fan);
+esp_err_t mqtt_publish_status(SensorData *sensor, FanState fan, SystemMode mode);
 
 /**
  * @brief 发布告警到 home/ventilation/alert
@@ -42,4 +43,4 @@ esp_err_t mqtt_publish_status(SensorData *sensor, FanState fan);
  */
 esp_err_t mqtt_publish_alert(const char *message);
 
-#endif // MQTT_CLIENT_H
+#endif // MQTT_WRAPPER_H

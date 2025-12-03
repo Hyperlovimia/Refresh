@@ -1,0 +1,58 @@
+menu "网络服务配置"
+
+    menu "WiFi 配置"
+        config WIFI_SSID
+            string "WiFi SSID（可选，用于开发测试）"
+            default ""
+            help
+                WiFi 接入点 SSID（可选）。
+                留空则使用 SmartConfig 配网或从 NVS 读取配置。
+
+        config WIFI_PASSWORD
+            string "WiFi 密码（可选，用于开发测试）"
+            default ""
+            help
+                WiFi 接入点密码（可选）。
+                留空则使用 SmartConfig 配网或从 NVS 读取配置。
+    endmenu
+
+    menu "和风天气 API 配置"
+        config WEATHER_API_KEY
+            string "和风天气 API Key"
+            default "your_api_key_here"
+            help
+                和风天气 API Key（必需）。
+                请在 https://dev.qweather.com/ 申请免费 API Key。
+
+        config WEATHER_CITY_CODE
+            string "城市代码"
+            default "101010100"
+            help
+                和风天气城市代码（必需）。
+                例如：101010100 代表北京。
+                城市代码查询：https://github.com/qwd/LocationList/blob/master/China-City-List-latest.csv
+    endmenu
+
+    menu "MQTT 配置"
+        config MQTT_BROKER_URL
+            string "MQTT Broker URL"
+            default "mqtts://xxx.emqxsl.cn:8883"
+            help
+                MQTT Broker URL（必需）。
+                使用 mqtts:// 前缀启用 TLS 加密。
+                示例：mqtts://xxx.emqxsl.cn:8883
+
+        config MQTT_USERNAME
+            string "MQTT 用户名"
+            default "your_username"
+            help
+                MQTT Broker 用户名（必需）。
+
+        config MQTT_PASSWORD
+            string "MQTT 密码"
+            default "your_password"
+            help
+                MQTT Broker 密码（必需）。
+    endmenu
+
+endmenu

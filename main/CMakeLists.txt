@@ -9,7 +9,7 @@ idf_component_register(
         "algorithm/local_mode.c"
         "network/wifi_manager.c"
         "network/weather_api.c"
-        "network/mqtt_client.c"
+        "network/mqtt_wrapper.c"
         "ui/oled_display.c"
     INCLUDE_DIRS
         "."
@@ -18,4 +18,14 @@ idf_component_register(
         "algorithm"
         "network"
         "ui"
+    REQUIRES
+        driver
+        esp_wifi
+        esp_netif
+        nvs_flash
+        esp_http_client
+        esp-tls
+        mqtt
+        json
+        esp_timer
 )
