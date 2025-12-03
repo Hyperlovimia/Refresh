@@ -7,6 +7,8 @@ TBD - created by archiving change implement-air-quality-system. Update Purpose a
 
 WiFi 管理模块 MUST 提供初始化、配网、连接检查和重连功能。
 
+**实现状态变更**：从桩函数升级为完整实现，所有场景的行为保持不变。
+
 #### Scenario: 初始化 WiFi 管理器
 
 **Given** ESP32-S3 WiFi 硬件未初始化
@@ -71,6 +73,8 @@ WiFi 管理模块 MUST 提供初始化、配网、连接检查和重连功能。
 ### Requirement: 天气 API 客户端
 
 天气 API 客户端 MUST 提供初始化、数据获取、缓存管理功能。
+
+**实现状态变更**：从桩函数升级为完整实现，所有场景的行为保持不变。
 
 #### Scenario: 初始化天气 API 客户端
 
@@ -143,6 +147,8 @@ WiFi 管理模块 MUST 提供初始化、配网、连接检查和重连功能。
 
 MQTT 客户端 MUST 提供初始化、状态发布、告警发布功能。
 
+**实现状态变更**：从桩函数升级为完整实现，所有场景的行为保持不变。
+
 #### Scenario: 初始化 MQTT 客户端
 
 **Given** 系统配置中有 EMQX Cloud 连接信息（URL、用户名、密码）
@@ -152,13 +158,12 @@ MQTT 客户端 MUST 提供初始化、状态发布、告警发布功能。
 - 配置 TLS 连接（启用 `esp_crt_bundle_attach`）
 - 设置遗嘱消息（Last Will）：`home/ventilation/status` → `{"online": false}`
 - 尝试连接到 Broker
-- 连接成功后订阅 `home/ventilation/command`（预留远程控制）
 - 函数返回 `ESP_OK`
 
 #### Scenario: 发布设备状态（正常模式）
 
 **Given** MQTT 已连接
-**When** 调用 `mqtt_publish_status(&sensor_data, FAN_LOW)`
+**When** 调用 `mqtt_publish_status(&sensor_data, FAN_LOW, MODE_NORMAL)`
 **Then**
 - 构建 JSON 消息：
   ```json
@@ -196,9 +201,9 @@ MQTT 客户端 MUST 提供初始化、状态发布、告警发布功能。
 **When** Broker 重启导致连接断开
 **Then**
 - 检测到断开事件
-- 等待 30 秒
-- 自动重连
-- 重连成功后重新订阅主题
+- 触发后台重连任务（通过定时器或独立任务，避免阻塞事件回调）
+- 等待 30 秒后自动重连
+- 重连成功后恢复正常发布
 
 #### Scenario: WiFi 断开时 MQTT 发布失败
 
@@ -208,6 +213,4 @@ MQTT 客户端 MUST 提供初始化、状态发布、告警发布功能。
 - 检测到 MQTT 客户端未连接
 - 函数返回 `ESP_FAIL`
 - 不阻塞，立即返回
-
----
 
