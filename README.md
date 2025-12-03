@@ -141,16 +141,12 @@ idf.py -p /dev/ttyACM0 monitor
 
 ## 网络服务配置
 
-系统支持三种网络服务：WiFi 连接、天气 API 和 MQTT 上报。完整配置指南请参考 [configuration-guide.md](openspec/changes/implement-network-services/configuration-guide.md)。
+系统支持三种网络服务：WiFi 连接、天气 API 和 MQTT 上报。
 
 ### 快速配置摘要
 
 #### 1. WiFi 配置
-
-**方式 A：SmartConfig 配网（推荐）**
-1. 首次启动时，系统会提示未找到 WiFi 配置
-2. 使用 ESP-Touch APP（iOS/Android）进行配网
-3. 凭据自动保存到 NVS，下次启动自动连接
+*注：之后微信小程序需要加一个 BluFi(BluFi.md)，用于用户配置WiFi*
 
 **方式 B：menuconfig 手动配置（开发调试）**
 ```bash
