@@ -231,7 +231,14 @@ static void sensor_task(void *pvParameters) {
         if (data.valid && data.co2 > CO2_ALERT_THRESHOLD) {
             char alert_msg[64];
             snprintf(alert_msg, sizeof(alert_msg), "CO₂浓度过高: %.0f ppm", data.co2);
+
+            // 发送到显示队列
             xQueueSend(alert_queue, &alert_msg, 0);
+
+            // 发送到 MQTT（如果已连接）
+            if (wifi_manager_is_connected()) {
+                mqtt_publish_alert(alert_msg);
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000)); // 1Hz

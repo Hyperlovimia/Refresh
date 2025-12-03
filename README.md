@@ -169,6 +169,10 @@ idf.py menuconfig
    # 导航到：Component config → 网络服务配置 → 和风天气 API 配置
    ```
 
+**⚠️ 当前实现限制**：
+
+由于和风天气的 `/air/now` 接口仅返回 PM2.5 数据，温度和风速使用默认值（20.0°C 和 0.0 m/s）。这不影响基于 PM2.5 的决策，但如果需要真实温度/风速，需要额外调用 `/weather/now` 接口。详见 [configuration-guide.md](openspec/changes/implement-network-services/configuration-guide.md#24-天气-api-限制说明)。
+
 #### 3. MQTT 配置
 
 1. 注册 [EMQX Cloud](https://www.emqx.com/zh/cloud) 账号

@@ -12,6 +12,7 @@
 #include "esp_smartconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "freertos/timers.h"
 #include <string.h>
 
 static const char *TAG = "WIFI_MGR";
@@ -36,9 +37,19 @@ static const char *TAG = "WIFI_MGR";
 
 // 全局变量
 static EventGroupHandle_t s_wifi_event_group = NULL;
+static TimerHandle_t s_reconnect_timer = NULL;
 static bool s_initialized = false;
 static int s_retry_count = 0;
 static bool s_is_runtime = false;  // 标记是否已进入运行时（初始化完成后）
+
+/**
+ * @brief WiFi 重连定时器回调（在定时器任务上下文中执行，不阻塞事件循环）
+ */
+static void reconnect_timer_callback(TimerHandle_t xTimer)
+{
+    ESP_LOGI(TAG, "执行 WiFi 重连...");
+    esp_wifi_connect();
+}
 
 /**
  * @brief WiFi 和 IP 事件处理器
@@ -65,19 +76,31 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                 xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 
                 if (s_is_runtime) {
-                    // 运行时：无限重试，10 秒间隔
+                    // 运行时：无限重试，使用定时器延迟 10 秒后重连
                     ESP_LOGI(TAG, "运行时断线，将在 %d 秒后重连...", WIFI_RUNTIME_RETRY_DELAY_MS / 1000);
-                    vTaskDelay(pdMS_TO_TICKS(WIFI_RUNTIME_RETRY_DELAY_MS));
-                    esp_wifi_connect();
+                    if (s_reconnect_timer != NULL) {
+                        xTimerChangePeriod(s_reconnect_timer, pdMS_TO_TICKS(WIFI_RUNTIME_RETRY_DELAY_MS), 0);
+                        xTimerStart(s_reconnect_timer, 0);
+                    } else {
+                        // 定时器未创建，直接重连（兜底）
+                        ESP_LOGW(TAG, "重连定时器未创建，立即重连");
+                        esp_wifi_connect();
+                    }
                 } else {
-                    // 初始化阶段：最多重试 3 次，5 秒间隔
+                    // 初始化阶段：最多重试 3 次，使用定时器延迟 5 秒后重连
                     if (s_retry_count < WIFI_INIT_MAX_RETRY_COUNT) {
                         s_retry_count++;
                         ESP_LOGI(TAG, "初始化阶段连接失败，重试 %d/%d（%d 秒后）",
                                 s_retry_count, WIFI_INIT_MAX_RETRY_COUNT,
                                 WIFI_INIT_RETRY_INTERVAL_MS / 1000);
-                        vTaskDelay(pdMS_TO_TICKS(WIFI_INIT_RETRY_INTERVAL_MS));
-                        esp_wifi_connect();
+                        if (s_reconnect_timer != NULL) {
+                            xTimerChangePeriod(s_reconnect_timer, pdMS_TO_TICKS(WIFI_INIT_RETRY_INTERVAL_MS), 0);
+                            xTimerStart(s_reconnect_timer, 0);
+                        } else {
+                            // 定时器未创建，直接重连（兜底）
+                            ESP_LOGW(TAG, "重连定时器未创建，立即重连");
+                            esp_wifi_connect();
+                        }
                     } else {
                         ESP_LOGE(TAG, "初始化阶段连接失败，已达最大重试次数");
                         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
@@ -219,15 +242,50 @@ esp_err_t wifi_manager_init(void)
     // 8. 配置 WiFi 为 STA 模式
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
-    // 9. 尝试从 NVS 读取配置
+    // 9. 创建重连定时器（单次触发）
+    s_reconnect_timer = xTimerCreate("wifi_reconnect",
+                                     pdMS_TO_TICKS(WIFI_INIT_RETRY_INTERVAL_MS),
+                                     pdFALSE,  // 单次触发
+                                     NULL,
+                                     reconnect_timer_callback);
+    if (s_reconnect_timer == NULL) {
+        ESP_LOGE(TAG, "创建重连定时器失败");
+        return ESP_FAIL;
+    }
+
+    // 10. 尝试从 NVS 读取配置
     char ssid[32] = {0};
     char password[64] = {0};
     wifi_config_t wifi_config = {0};
+    bool has_config = false;
 
     if (read_wifi_config_from_nvs(ssid, password) == ESP_OK) {
         // 有保存的配置，使用它连接
+        ESP_LOGI(TAG, "使用 NVS 中的 WiFi 配置");
         strlcpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
         strlcpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
+        has_config = true;
+    } else {
+        // NVS 无配置，尝试从 menuconfig 读取
+#ifdef CONFIG_WIFI_SSID
+        const char *config_ssid = CONFIG_WIFI_SSID;
+        const char *config_password = CONFIG_WIFI_PASSWORD;
+
+        if (strlen(config_ssid) > 0) {
+            ESP_LOGI(TAG, "使用 menuconfig 中的 WiFi 配置");
+            strlcpy((char*)wifi_config.sta.ssid, config_ssid, sizeof(wifi_config.sta.ssid));
+            strlcpy((char*)wifi_config.sta.password, config_password, sizeof(wifi_config.sta.password));
+            has_config = true;
+        } else {
+            ESP_LOGW(TAG, "menuconfig 中 SSID 为空");
+        }
+#else
+        ESP_LOGW(TAG, "menuconfig 未配置 WiFi SSID");
+#endif
+    }
+
+    if (has_config) {
+        // 有配置（NVS 或 menuconfig），尝试连接
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
         ESP_ERROR_CHECK(esp_wifi_start());
 
@@ -250,8 +308,8 @@ esp_err_t wifi_manager_init(void)
             return ESP_FAIL;
         }
     } else {
-        // 无保存的配置，提示用户配网
-        ESP_LOGW(TAG, "未找到 WiFi 配置，请调用 wifi_manager_start_provisioning() 进行配网");
+        // 无任何配置，提示用户配网
+        ESP_LOGW(TAG, "未找到 WiFi 配置（NVS 和 menuconfig 均无），请调用 wifi_manager_start_provisioning() 进行配网");
         ESP_ERROR_CHECK(esp_wifi_start());
         s_initialized = true;
         return ESP_OK;  // 返回 OK，但未连接
