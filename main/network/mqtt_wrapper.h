@@ -43,4 +43,12 @@ esp_err_t mqtt_publish_status(SensorData *sensor, FanState fan, SystemMode mode)
  */
 esp_err_t mqtt_publish_alert(const char *message);
 
+/**
+ * @brief 获取远程风扇控制命令
+ * 从 home/ventilation/command 主题接收的最新命令
+ * @param[out] cmd 输出风扇状态
+ * @return true 有新命令，false 无命令或未连接
+ */
+bool mqtt_get_remote_command(FanState *cmd);
+
 #endif // MQTT_WRAPPER_H

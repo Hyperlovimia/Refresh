@@ -20,6 +20,7 @@ static const char *TAG = "MQTT_CLIENT";
 // MQTT 主题定义
 #define MQTT_TOPIC_STATUS   "home/ventilation/status"
 #define MQTT_TOPIC_ALERT    "home/ventilation/alert"
+#define MQTT_TOPIC_COMMAND  "home/ventilation/command"
 
 // MQTT 重连配置
 #define MQTT_RECONNECT_DELAY_MS  30000  // 30 秒重连间隔
@@ -28,6 +29,8 @@ static const char *TAG = "MQTT_CLIENT";
 static esp_mqtt_client_handle_t s_mqtt_client = NULL;
 static bool s_mqtt_connected = false;
 static TimerHandle_t s_reconnect_timer = NULL;
+static FanState s_remote_command = FAN_OFF;
+static bool s_command_received = false;
 
 /**
  * @brief FanState 转字符串
@@ -52,10 +55,8 @@ static const char* fan_state_to_string(FanState state)
 static const char* system_mode_to_string(SystemMode mode)
 {
     switch (mode) {
-        case MODE_NORMAL:
-            return "NORMAL";
-        case MODE_DEGRADED:
-            return "DEGRADED";
+        case MODE_REMOTE:
+            return "REMOTE";
         case MODE_LOCAL:
             return "LOCAL";
         case MODE_SAFE_STOP:
@@ -63,6 +64,38 @@ static const char* system_mode_to_string(SystemMode mode)
         default:
             return "UNKNOWN";
     }
+}
+
+/**
+ * @brief 字符串转 FanState
+ */
+static FanState string_to_fan_state(const char *str)
+{
+    if (strcmp(str, "OFF") == 0) return FAN_OFF;
+    if (strcmp(str, "LOW") == 0) return FAN_LOW;
+    if (strcmp(str, "HIGH") == 0) return FAN_HIGH;
+    return FAN_OFF;
+}
+
+/**
+ * @brief 解析远程命令 JSON
+ */
+static void parse_remote_command(const char *data, int len)
+{
+    cJSON *root = cJSON_ParseWithLength(data, len);
+    if (!root) {
+        ESP_LOGW(TAG, "远程命令 JSON 解析失败");
+        return;
+    }
+
+    cJSON *fan_state = cJSON_GetObjectItem(root, "fan_state");
+    if (cJSON_IsString(fan_state)) {
+        s_remote_command = string_to_fan_state(fan_state->valuestring);
+        s_command_received = true;
+        ESP_LOGI(TAG, "收到远程命令: fan_state=%s", fan_state->valuestring);
+    }
+
+    cJSON_Delete(root);
 }
 
 /**
@@ -92,6 +125,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             if (s_reconnect_timer != NULL && xTimerIsTimerActive(s_reconnect_timer)) {
                 xTimerStop(s_reconnect_timer, 0);
             }
+
+            // 订阅远程命令主题
+            esp_mqtt_client_subscribe(s_mqtt_client, MQTT_TOPIC_COMMAND, 1);
             break;
 
         case MQTT_EVENT_DISCONNECTED:
@@ -107,7 +143,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
         case MQTT_EVENT_SUBSCRIBED:
             ESP_LOGI(TAG, "MQTT 订阅成功，msg_id=%d", event->msg_id);
-            // 预留：用于未来远程控制功能
+            break;
+
+        case MQTT_EVENT_DATA:
+            // 处理接收到的消息
+            if (event->topic_len > 0 && strncmp(event->topic, MQTT_TOPIC_COMMAND, event->topic_len) == 0) {
+                parse_remote_command(event->data, event->data_len);
+            }
             break;
 
         case MQTT_EVENT_PUBLISHED:
@@ -316,4 +358,13 @@ esp_err_t mqtt_publish_alert(const char *message)
     cJSON_Delete(root);
 
     return ESP_OK;
+}
+
+bool mqtt_get_remote_command(FanState *cmd)
+{
+    if (!cmd || !s_mqtt_connected || !s_command_received) {
+        return false;
+    }
+    *cmd = s_remote_command;
+    return true;
 }

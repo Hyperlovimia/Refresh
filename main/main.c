@@ -18,7 +18,6 @@
 #include "actuators/fan_control.h"
 #include "algorithm/decision_engine.h"
 #include "network/wifi_manager.h"
-#include "network/weather_api.h"
 #include "network/mqtt_wrapper.h"
 #include "ui/oled_display.h"
 
@@ -37,7 +36,6 @@ static SystemMode current_mode = MODE_LOCAL;
 
 // 共享数据缓冲区
 static SensorData shared_sensor_data = {0};
-static WeatherData shared_weather_data = {0};
 static FanState shared_fan_state = FAN_OFF;
 
 // 同步对象
@@ -250,8 +248,8 @@ static void sensor_task(void *pvParameters) {
  */
 static void decision_task(void *pvParameters) {
     SensorData sensor;
-    WeatherData weather;
     FanState new_state;
+    FanState remote_cmd = FAN_OFF;
 
     ESP_LOGI(TAG, "决策任务启动");
 
@@ -265,22 +263,22 @@ static void decision_task(void *pvParameters) {
         // 读取共享数据
         xSemaphoreTake(data_mutex, portMAX_DELAY);
         memcpy(&sensor, &shared_sensor_data, sizeof(SensorData));
-        memcpy(&weather, &shared_weather_data, sizeof(WeatherData));
         FanState old_state = shared_fan_state;
         xSemaphoreGive(data_mutex);
 
         // 检测运行模式
         bool wifi_ok = wifi_manager_is_connected();
-        bool cache_valid = !weather_api_is_cache_stale();
         bool sensor_ok = sensor_manager_is_healthy();
-        current_mode = decision_detect_mode(wifi_ok, cache_valid, sensor_ok);
+        current_mode = decision_detect_mode(wifi_ok, sensor_ok);
+
+        // 获取远程命令（MODE_REMOTE 时使用）
+        mqtt_get_remote_command(&remote_cmd);
 
         // 执行决策
-        new_state = decision_make(&sensor, &weather, current_mode);
+        new_state = decision_make(&sensor, remote_cmd, current_mode);
 
-        // 设置风扇状态（根据时间判断昼夜模式）
-        // TODO: 实现昼夜判断逻辑（22:00-8:00为夜间）
-        bool is_night = false; // 简化实现，默认白天模式
+        // 设置风扇状态
+        bool is_night = false;
 
         if (new_state != old_state) {
             fan_control_set_state(new_state, is_night);
@@ -297,13 +295,11 @@ static void decision_task(void *pvParameters) {
 }
 
 /**
- * @brief 网络任务（天气10分钟周期 + MQTT 30秒周期）
+ * @brief 网络任务（MQTT 30秒周期上报）
  */
 static void network_task(void *pvParameters) {
-    WeatherData weather;
     SensorData sensor;
     FanState fan;
-    uint32_t last_weather_fetch = 0;
     uint32_t last_mqtt_publish = 0;
 
     ESP_LOGI(TAG, "网络任务启动");
@@ -311,36 +307,21 @@ static void network_task(void *pvParameters) {
     while (1) {
         uint32_t now = xTaskGetTickCount() / configTICK_RATE_HZ;
 
-        // 检查是否需要拉取天气数据（10 分钟周期）
-        if (now - last_weather_fetch >= WEATHER_FETCH_INTERVAL_SEC) {
-            if (wifi_manager_is_connected()) {
-                xEventGroupSetBits(system_events, EVENT_WIFI_CONNECTED);
-
-                ESP_LOGI(TAG, "拉取天气数据");
-                if (weather_api_fetch(&weather) == ESP_OK) {
-                    xSemaphoreTake(data_mutex, portMAX_DELAY);
-                    memcpy(&shared_weather_data, &weather, sizeof(WeatherData));
-                    xSemaphoreGive(data_mutex);
-                    ESP_LOGI(TAG, "天气数据更新成功");
-                } else {
-                    ESP_LOGW(TAG, "天气数据拉取失败，使用缓存");
-                }
-            } else {
-                xEventGroupClearBits(system_events, EVENT_WIFI_CONNECTED);
-            }
-            last_weather_fetch = now;
+        // 更新 WiFi 连接事件
+        if (wifi_manager_is_connected()) {
+            xEventGroupSetBits(system_events, EVENT_WIFI_CONNECTED);
+        } else {
+            xEventGroupClearBits(system_events, EVENT_WIFI_CONNECTED);
         }
 
         // 检查是否需要发布 MQTT 状态（30 秒周期）
         if (now - last_mqtt_publish >= MQTT_PUBLISH_INTERVAL_SEC) {
             if (wifi_manager_is_connected()) {
-                // 获取共享数据（加锁）
                 if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                     memcpy(&sensor, &shared_sensor_data, sizeof(SensorData));
                     fan = shared_fan_state;
                     xSemaphoreGive(data_mutex);
 
-                    // 发布状态
                     esp_err_t ret = mqtt_publish_status(&sensor, fan, current_mode);
                     if (ret != ESP_OK) {
                         ESP_LOGW(TAG, "MQTT 状态发布失败");
@@ -350,7 +331,6 @@ static void network_task(void *pvParameters) {
             last_mqtt_publish = now;
         }
 
-        // 任务休眠 1 秒（确保及时响应）
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
@@ -360,7 +340,6 @@ static void network_task(void *pvParameters) {
  */
 static void display_task(void *pvParameters) {
     SensorData sensor;
-    WeatherData weather;
     FanState fan;
     char alert_msg[64];
 
@@ -377,11 +356,10 @@ static void display_task(void *pvParameters) {
         if (current_state == STATE_RUNNING) {
             xSemaphoreTake(data_mutex, portMAX_DELAY);
             memcpy(&sensor, &shared_sensor_data, sizeof(SensorData));
-            memcpy(&weather, &shared_weather_data, sizeof(WeatherData));
             fan = shared_fan_state;
             xSemaphoreGive(data_mutex);
 
-            oled_display_main_page(&sensor, &weather, fan, current_mode);
+            oled_display_main_page(&sensor, NULL, fan, current_mode);
         }
 
         vTaskDelay(pdMS_TO_TICKS(2000)); // 0.5Hz
@@ -449,14 +427,6 @@ static esp_err_t system_init(void) {
         ESP_LOGW(TAG, "⚠ WiFi管理器初始化失败（继续运行）");
     } else {
         ESP_LOGI(TAG, "✓ WiFi管理器初始化成功");
-    }
-
-    // 初始化天气 API
-    ret = weather_api_init();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "⚠ 天气API初始化失败（继续运行）");
-    } else {
-        ESP_LOGI(TAG, "✓ 天气API初始化成功");
     }
 
     // 初始化 MQTT 客户端

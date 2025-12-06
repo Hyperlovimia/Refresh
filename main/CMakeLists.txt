@@ -8,7 +8,6 @@ idf_component_register(
         "algorithm/decision_engine.c"
         "algorithm/local_mode.c"
         "network/wifi_manager.c"
-        "network/weather_api.c"
         "network/mqtt_wrapper.c"
         "ui/oled_display.c"
     INCLUDE_DIRS
@@ -23,7 +22,6 @@ idf_component_register(
         esp_wifi
         esp_netif
         nvs_flash
-        esp_http_client
         esp-tls
         mqtt
         json

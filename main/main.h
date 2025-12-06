@@ -31,9 +31,8 @@ typedef enum {
  * @brief 系统运行模式
  */
 typedef enum {
-    MODE_NORMAL,    ///< 正常模式（WiFi + 天气数据 + 完整算法）
-    MODE_DEGRADED,  ///< 降级模式（WiFi 断开但缓存有效）
-    MODE_LOCAL,     ///< 本地模式（网络离线 >30min，仅 CO2 决策）
+    MODE_REMOTE,    ///< 远程模式（WiFi 连接，接收远程风扇控制命令）
+    MODE_LOCAL,     ///< 本地模式（网络离线，仅 CO2 决策）
     MODE_SAFE_STOP  ///< 安全停机（传感器故障）
 } SystemMode;
 
