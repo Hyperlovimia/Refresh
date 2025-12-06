@@ -165,48 +165,12 @@ idf.py menuconfig
    # 导航到：Component config → 网络服务配置 → MQTT 配置
    ```
 
-#### MQTT 主题说明
-
-**发布主题（设备 → 服务器）**：
-
-- **状态主题**: `home/ventilation/status`
-  - 发布频率：30 秒（仅传感器数据有效时发布）
-  - QoS: 0
-  - 消息格式：
-    ```json
-    {
-      "co2": 850,
-      "temp": 24.5,
-      "humi": 58,
-      "fan_state": "LOW",
-      "mode": "REMOTE",
-      "timestamp": 1733241234
-    }
-    ```
-
-- **告警主题**: `home/ventilation/alert`
-  - 触发条件：CO₂ > 1500 ppm 或传感器故障
-  - QoS: 1
-  - 消息格式：
-    ```json
-    {
-      "alert": "CO₂浓度过高: 1600 ppm",
-      "level": "WARNING",
-      "timestamp": 1733241234
-    }
-    ```
-
-**订阅主题（服务器 → 设备）**：
-
-- **命令主题**: `home/ventilation/command`
-  - 用途：远程服务器下发风扇控制命令
-  - QoS: 1
-  - 消息格式：
-    ```json
-    {
-      "fan_state": "OFF|LOW|HIGH"
-    }
-    ```
+**详细配置说明**：请参阅 [MQTT 消息格式与数据流向说明](Guides/MQTT.md)，包含：
+- 完整的消息格式定义（状态上报、告警、远程命令）
+- 本地代码数据流向详解
+- 系统模式切换逻辑
+- 调试与监控方法
+- 常见问题解答
 
 ---
 
@@ -423,6 +387,9 @@ ESP_LOGI(TAG, "Free heap: %d", esp_get_free_heap_size());
 - [ESP32-S3 技术规格书](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_cn.pdf)
 - [和风天气 API 文档](https://dev.qweather.com/docs/api/)
 - [EMQX Cloud 文档](https://docs.emqx.com/zh/cloud/latest/)
+
+### 项目文档
+- [MQTT 消息格式与数据流向说明](Guides/MQTT.md) - MQTT 通信详细文档
 
 ### 传感器文档
 - MH-Z19 CO₂ 传感器数据手册
