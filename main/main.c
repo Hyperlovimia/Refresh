@@ -249,7 +249,7 @@ static void sensor_task(void *pvParameters) {
 static void decision_task(void *pvParameters) {
     SensorData sensor;
     FanState new_state;
-    FanState remote_cmd = FAN_OFF;
+    FanState remote_cmd;
 
     ESP_LOGI(TAG, "决策任务启动");
 
@@ -271,8 +271,14 @@ static void decision_task(void *pvParameters) {
         bool sensor_ok = sensor_manager_is_healthy();
         current_mode = decision_detect_mode(wifi_ok, sensor_ok);
 
-        // 获取远程命令（MODE_REMOTE 时使用）
-        mqtt_get_remote_command(&remote_cmd);
+        // MODE_REMOTE 时获取远程命令，无命令则保持当前状态
+        if (current_mode == MODE_REMOTE) {
+            if (!mqtt_get_remote_command(&remote_cmd)) {
+                ESP_LOGD(TAG, "远程模式：无新命令，保持当前状态");
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                continue;
+            }
+        }
 
         // 执行决策
         new_state = decision_make(&sensor, remote_cmd, current_mode);
@@ -322,9 +328,14 @@ static void network_task(void *pvParameters) {
                     fan = shared_fan_state;
                     xSemaphoreGive(data_mutex);
 
-                    esp_err_t ret = mqtt_publish_status(&sensor, fan, current_mode);
-                    if (ret != ESP_OK) {
-                        ESP_LOGW(TAG, "MQTT 状态发布失败");
+                    // 仅在传感器数据有效时发布
+                    if (sensor.valid) {
+                        esp_err_t ret = mqtt_publish_status(&sensor, fan, current_mode);
+                        if (ret != ESP_OK) {
+                            ESP_LOGW(TAG, "MQTT 状态发布失败");
+                        }
+                    } else {
+                        ESP_LOGD(TAG, "传感器数据无效，跳过 MQTT 发布");
                     }
                 }
             }

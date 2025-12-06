@@ -29,9 +29,8 @@
 
 ### 网络功能
 - ✅ **WiFi 管理**：SmartConfig 一键配网 + NVS 凭据存储 + 自动重连
-- ✅ **天气 API**：对接和风天气 API，获取室外 PM2.5 数据（30 分钟缓存）
-- ✅ **MQTT 上报**：通过 EMQX Cloud 上报设备状态和告警（TLS 加密）
-- ✅ **降级策略**：网络断开时自动切换到本地模式，保证系统稳定运行
+- ✅ **MQTT 双向通信**：上报设备状态 + 接收远程风扇控制命令（TLS 加密）
+- ✅ **远程控制**：联网时由远程服务器决策风扇状态，离线时自动切换本地模式
 
 ### 系统特性
 - ✅ **状态机管理**：INIT → PREHEATING (60s) → STABILIZING (240s) → RUNNING
@@ -141,35 +140,20 @@ idf.py -p /dev/ttyACM0 monitor
 
 ## 网络服务配置
 
-系统支持三种网络服务：WiFi 连接、天气 API 和 MQTT 上报。
+系统支持两种网络服务：WiFi 连接和 MQTT 通信。
 
 ### 快速配置摘要
 
 #### 1. WiFi 配置
 *注：之后微信小程序需要加一个 BluFi(BluFi.md)，用于用户配置WiFi*
 
-**方式 B：menuconfig 手动配置（开发调试）**
+**menuconfig 手动配置（开发调试）**
 ```bash
 idf.py menuconfig
 # 导航到：Component config → 网络服务配置 → WiFi 配置
 ```
 
-#### 2. 和风天气 API 配置
-
-1. 注册 [和风天气开发者账号](https://dev.qweather.com/)
-2. 创建项目并获取 API Key
-3. 查询城市代码（例如：北京 = 101010100）
-4. 通过 menuconfig 配置：
-   ```bash
-   idf.py menuconfig
-   # 导航到：Component config → 网络服务配置 → 和风天气 API 配置
-   ```
-
-**⚠️ 当前实现限制**：
-
-由于和风天气的 `/air/now` 接口仅返回 PM2.5 数据，温度和风速使用默认值（20.0°C 和 0.0 m/s）。这不影响基于 PM2.5 的决策，但如果需要真实温度/风速，需要额外调用 `/weather/now` 接口。详见 [configuration-guide.md](openspec/changes/implement-network-services/configuration-guide.md#24-天气-api-限制说明)。
-
-#### 3. MQTT 配置
+#### 2. MQTT 配置
 
 1. 注册 [EMQX Cloud](https://www.emqx.com/zh/cloud) 账号
 2. 创建 Serverless 部署（免费）
@@ -183,10 +167,10 @@ idf.py menuconfig
 
 #### MQTT 主题说明
 
-系统会发布以下主题：
+**发布主题（设备 → 服务器）**：
 
 - **状态主题**: `home/ventilation/status`
-  - 发布频率：30 秒
+  - 发布频率：30 秒（仅传感器数据有效时发布）
   - QoS: 0
   - 消息格式：
     ```json
@@ -195,7 +179,7 @@ idf.py menuconfig
       "temp": 24.5,
       "humi": 58,
       "fan_state": "LOW",
-      "mode": "NORMAL",
+      "mode": "REMOTE",
       "timestamp": 1733241234
     }
     ```
@@ -212,19 +196,30 @@ idf.py menuconfig
     }
     ```
 
+**订阅主题（服务器 → 设备）**：
+
+- **命令主题**: `home/ventilation/command`
+  - 用途：远程服务器下发风扇控制命令
+  - QoS: 1
+  - 消息格式：
+    ```json
+    {
+      "fan_state": "OFF|LOW|HIGH"
+    }
+    ```
+
 ---
 
 ## 系统架构
 
 ### 系统运行模式
 
-系统支持 4 种运行模式，根据网络和传感器状态自动切换：
+系统支持 3 种运行模式，根据网络和传感器状态自动切换：
 
 | 模式        | 描述                                                                 | 触发条件                                      |
 |-------------|----------------------------------------------------------------------|-----------------------------------------------|
-| NORMAL      | 正常模式：使用全部数据（室内+室外）进行决策                          | WiFi 连接 + 天气数据有效                      |
-| DEGRADED    | 降级模式：使用室内数据 + 过期天气缓存                                 | WiFi 连接 + 天气数据过期（> 30 分钟）         |
-| LOCAL       | 本地模式：仅使用室内传感器数据                                        | WiFi 断开                                     |
+| REMOTE      | 远程模式：接收远程服务器的风扇控制命令                                | WiFi 连接                                     |
+| LOCAL       | 本地模式：仅使用室内 CO₂ 数据进行本地决策                             | WiFi 断开                                     |
 | SAFE_STOP   | 安全停机模式：传感器故障，关闭新风机                                  | 传感器健康检查失败                            |
 
 ### 状态机流程
@@ -250,13 +245,13 @@ INIT (重新初始化)
 | 任务         | 优先级 | 频率   | 职责                                                                 |
 |--------------|--------|--------|----------------------------------------------------------------------|
 | sensor_task  | 高     | 1Hz    | 读取传感器数据，写入共享缓冲区，检查 CO₂ 告警                       |
-| decision_task| 中     | 1Hz    | 读取传感器+天气数据，执行决策算法，控制风扇状态                      |
-| network_task | 低     | 变频   | WiFi 管理，天气 API 拉取（10 分钟），MQTT 状态发布（30 秒）         |
+| decision_task| 中     | 1Hz    | 检测运行模式，获取远程命令或本地决策，控制风扇状态                   |
+| network_task | 低     | 30秒   | WiFi 状态管理，MQTT 状态发布                                         |
 | display_task | 低     | 0.5Hz  | 更新 OLED 显示，处理告警队列                                         |
 
 ### 同步机制
 
-- **data_mutex**: 保护共享传感器数据、天气数据和风扇状态
+- **data_mutex**: 保护共享传感器数据和风扇状态
 - **i2c_mutex**: 保护 I2C 总线访问（SHT35 和 OLED 共享）
 - **system_events**: 事件组，用于状态机同步（传感器就绪、WiFi 连接等）
 - **alert_queue**: 告警消息队列，用于传感器任务向显示任务传递告警
@@ -283,9 +278,7 @@ Refresh/
 │   ├── network/               # 网络通信模块
 │   │   ├── wifi_manager.c     # WiFi 管理（SmartConfig + 重连）
 │   │   ├── wifi_manager.h
-│   │   ├── weather_api.c      # 天气 API 客户端（HTTPS + JSON）
-│   │   ├── weather_api.h
-│   │   ├── mqtt_wrapper.c     # MQTT 客户端（TLS + 重连）
+│   │   ├── mqtt_wrapper.c     # MQTT 客户端（TLS + 双向通信）
 │   │   └── mqtt_wrapper.h
 │   ├── sensors/               # 传感器接口模块
 │   │   ├── co2_sensor.c       # CO₂ 传感器（UART）
@@ -402,15 +395,6 @@ idf.py menuconfig
 - 确认传感器供电正常（3.3V 或 5V）
 - CO₂ 传感器需要 60 秒预热时间
 - 使用万用表测量 I2C 总线电压
-
-#### 4. 天气 API 获取失败
-**症状**：日志显示 `HTTP 请求失败: ESP_ERR_HTTP_CONNECT`
-
-**解决方案**：
-- 确保 WiFi 已连接
-- 检查 API Key 是否有效（登录和风天气控制台）
-- 验证城市代码是否正确
-- 检查 API 调用次数是否超限（免费版每天 1000 次）
 
 ### 调试技巧
 

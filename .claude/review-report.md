@@ -77,3 +77,43 @@
 ## 残留风险与建议
 - `sensor_manager_set_pollutant` 及新结构缺乏任何自动化测试，建议补充最起码的单元测试验证越界/重置逻辑，同时完成 `tasks.md` 中 5.2 硬件验证。
 - 新增的 PM/VOC/HCHO 数据目前仍未在 MQTT/UI 层消费，若这是排期外工作，应在文档中注明“仅数据结构预留”，否则易被误解成已经完成功能。
+
+---
+
+# 审查报告 — remove-local-online-decision
+日期：2025-12-06 23:45 (UTC+8)  
+审查人：Codex
+
+## 结论
+- 综合评分：56/100  
+- 建议：需讨论（远程命令回退与数据有效性校验未按 spec 完成，另有文档/配置遗留）
+
+## 技术维度评分
+- 代码正确性：55 — MQTT 状态发布缺少有效性保护，MODE_REMOTE 默认回退至 FAN_OFF。
+- 需求符合度：50 — Spec delta 对“无命令保持上一状态”“仅发送有效传感器数据”的要求未覆盖；天气 API 删除后配置/文档仍未更新。
+- 测试与可验证性：40 — 没有任何日志/测试说明覆盖上述场景，当前代码路径难以验证。
+
+## 战略维度评分
+- 需求匹配：55 — 业务目标是“本地仅执行远程命令并保证数据正常”，但交付结果仍会推送无效数据、默认停机。
+- 风险识别：50 — 缺乏关于远程命令缺失或天气配置失效的说明，部署时易触发隐藏故障。
+
+## 主要发现
+1. **MODE_REMOTE 未按 spec 在无命令时保持上一状态**  
+   - `decision_task` 每秒都调用 `mqtt_get_remote_command(&remote_cmd)` 但完全忽略返回值（`main/main.c:250-279`），`remote_cmd` 初始化为 `FAN_OFF`。  
+   - 当设备从 MODE_LOCAL（例如由于 WiFi 断线）切回 MODE_REMOTE 而远程服务器尚未下发命令时，`decision_make()` 会立即返回默认值 `FAN_OFF`（`main/algorithm/decision_engine.c:12-24`），强制关闭风扇。  
+   - Spec delta **明确要求**“未收到有效远程命令时返回上一有效风扇状态”（`openspec/changes/remove-local-online-decision/specs/decision-algorithm/spec.md:68-73`），当前实现既没有 `FAN_INVALID` 分支，也没有 fallback 至 `old_state` 的逻辑，违背契约。
+
+2. **MQTT 状态发布未检查 `sensor->valid`，会推送预热期的无效数据**  
+   - `network_task` 只要 WiFi 连通就每 30 秒调用 `mqtt_publish_status(&sensor, fan, current_mode)`（`main/main.c:317-326`），即使 `shared_sensor_data.valid == false`（启动初期或传感器失败）也照发。  
+   - `mqtt_publish_status` 本身只检查指针和 MQTT 连接，从未验证 `sensor->valid` 或记录跳过日志（`main/network/mqtt_wrapper.c:260-310`）。  
+   - 这违背了业务描述“确保传感器发送的数据为正常运行状态”以及 network-services spec delta “`sensor->valid == false` 时 MUST 记录并返回 `ESP_FAIL`”（`openspec/changes/remove-local-online-decision/specs/network-services/spec.md:98-114`），远程服务器会收到零值/垃圾数据并据此做决策。
+
+3. **天气 API 配置与文档未清理，仍提示用户填写无效参数**  
+   - `main/Kconfig.projbuild:19-35` 依旧把“和风天气 API Key/城市代码”作为“必需”配置项，README 的网络服务章节也指导用户申请 API、在 menuconfig 中填写（`README.md:142-200`）。  
+   - 然而 weather_api.c/h 已被删除、任何代码都不再读取 `CONFIG_WEATHER_*`，这些“必需配置”完全无用，违背了“删除天气 API 调用并改由远程服务器处理”的任务目的。  
+   - 若继续保留，部署者会浪费时间申请密钥，还可能误以为本地仍会访问外部 API；需要同步移除或至少在文档里标注已废弃。
+
+## 残留风险与建议
+- MODE_REMOTE 建议在 `mqtt_get_remote_command()` 返回 false 时直接维持 `shared_fan_state`，或引入显式的 `FAN_INVALID`/`bool has_cmd` 逻辑，与 spec 场景对齐并记录日志。
+- `mqtt_publish_status` 与调用方应在 `sensor->valid == false` 时返回 `ESP_FAIL` + warning；network_task 收到失败后也应延迟下次发布，避免刷屏。
+- menuconfig/README 需移除天气配置章节或标注“由远程服务器负责”，同时更新状态 JSON 示例中的 `mode` 字段值（现已改为 `REMOTE/LOCAL/SAFE_STOP`）。

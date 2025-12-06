@@ -124,3 +124,9 @@
 2025-12-06 21:13 (UTC+8) | shell(nl main/* openspec/specs) | 提取行号用于引用（sensor_manager、main.h、oled_display、system-orchestration、UI spec）
 2025-12-06 21:17 (UTC+8) | apply_patch | 更新 `.claude/context-codex.md` 记录本次审查的接口与风险
 2025-12-06 21:18 (UTC+8) | apply_patch | 将室内污染物扩展审查结果写入 `.claude/review-report.md`
+2025-12-06 23:34 (UTC+8) | shell(ls/git status) | 检查 remove-local-online-decision 交付前的仓库状态
+2025-12-06 23:34 (UTC+8) | shell(rg weather/ls main) | 确认天气 API 溢出引用和目录结构
+2025-12-06 23:35 (UTC+8) | shell(sed main/*.c|h) | 阅读 main.c、decision_engine、mqtt_wrapper 以及 Kconfig/README 相关段落
+2025-12-06 23:36 (UTC+8) | shell(rg/spec cat) | 查看 openspec/changes/remove-local-online-decision 下的 spec/tasks
+2025-12-06 23:36 (UTC+8) | sequential-thinking | 记录 remove-local-online-decision 审查推理 4 步
+2025-12-06 23:37 (UTC+8) | plan.update | 更新三步审查计划的进度

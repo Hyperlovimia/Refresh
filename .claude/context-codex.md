@@ -49,3 +49,21 @@
 1. UI 能力规范仍以旧函数签名示例，代码更改未在 `specs/user-interface` 追加 delta，可能导致 API 合同不一致。
 2. 新增的 PM/VOC/HCHO 合法范围常量目前未在 `sensor_manager_set_pollutant()` 或 `sensor_manager_read_all()` 中用于判定/夹取，`SensorData.valid` 仍只依赖 CO₂/温湿度。
 3. `sensor_manager_reinit()`（`main/sensors/sensor_manager.c:124-147`）仅重置 CO₂ 缓存与传感器，但未清空 `manual_pollutants`，可能与 spec “清空缓冲区” 要求不符，导致错误恢复后仍输出旧的手动数值。
+
+# remove-local-online-decision 审查上下文
+日期：2025-12-06 23:37 (UTC+8) — Codex
+
+## 接口契约
+- **decision_make/decision_detect_mode**（`main/algorithm/decision_engine.c:12-38`）需符合 spec delta 对 MODE_REMOTE/LCOAL 的定义，尤其是“未收到有效远程命令则返回上一次有效风扇状态”的场景（`openspec/changes/remove-local-online-decision/specs/decision-algorithm/spec.md:21-74`）。
+- **mqtt_publish_status**（`main/network/mqtt_wrapper.c:260-310`）必须遵守“MQTT 状态发布仅在 `sensor->valid == true` 时执行”的新契约，并在数据无效时记录跳过日志（`openspec/changes/remove-local-online-decision/specs/network-services/spec.md:98-114`）。
+- **mqtt_get_remote_command`/命令订阅**（`main/network/mqtt_wrapper.c:96-369`）应覆盖 spec 中关于命令接收、缓冲与错误处理的场景，包括“无有效命令 -> 返回 false 且不修改输出”（`openspec/changes/remove-local-online-decision/specs/network-services/spec.md:45-95`）。
+
+## 关键疑问
+1. MODE_REMOTE 时 `decision_task` 忽略 `mqtt_get_remote_command()` 的返回值（`main/main.c:274-279`），在 WiFi 刚恢复但远程命令尚未抵达时会直接把风扇设为 `remote_cmd` 的默认值（`FAN_OFF`），与 spec 场景“未收到有效命令时保持上一有效状态”冲突。
+2. MQTT 状态发布链路（`main/main.c:317-330` -> `main/network/mqtt_wrapper.c:260-310`）没有检查 `sensor->valid`，系统预热/稳定阶段产生的无效数据仍会发送到服务器，不满足“确保传感器发送的数据为正常运行状态”的业务描述。
+3. menuconfig 与 README 仍要求填写和风天气 API Key（`main/Kconfig.projbuild:19-35`、`README.md:142-210`），但天气模块已删除，是否需要清理配置项/文档以免误导？
+
+## 风险提示
+- 若远程命令缺失即退回 `FAN_OFF`，一旦 MQTT 链路异常就会导致风扇强制停机，无法满足“远程命令缺失 → 维持上一有效状态”的契约。
+- 无效的传感器快照被推送至 MQTT，远程服务器据此决策会产生噪声甚至误判，特别是在系统刚进入 STATE_RUNNING 的阶段。
+- 未清理的天气配置/文档会让部署者继续申请 API Key 并在 menuconfig 中填入“必需”字段，却完全无处使用，交付体验受损。
