@@ -70,147 +70,102 @@ WiFi 管理模块 MUST 提供初始化、配网、连接检查和重连功能。
 
 ---
 
-### Requirement: 天气 API 客户端
-
-天气 API 客户端 MUST 提供初始化、数据获取、缓存管理功能。
-
-**实现状态变更**：从桩函数升级为完整实现，所有场景的行为保持不变。
-
-#### Scenario: 初始化天气 API 客户端
-
-**Given** 系统配置中有和风天气 API Key 和城市代码
-**When** 调用 `weather_api_init()`
-**Then**
-- 从 menuconfig 读取 API Key 和城市代码
-- 初始化 HTTPS 客户端
-- 清空缓存
-- 函数返回 `ESP_OK`
-
-#### Scenario: 获取实时天气数据（成功）
-
-**Given** WiFi 已连接且网络正常
-**When** 调用 `weather_api_fetch(&data)`
-**Then**
-- 发送 HTTPS GET 请求到 `https://api.qweather.com/v7/air/now?location=城市代码&key=API_KEY`
-- 解析 JSON 响应：
-  ```json
-  {
-    "now": {
-      "pm2p5": "35",
-      "temp": "22",
-      "windSpeed": "12"
-    }
-  }
-  ```
-- 填充 `WeatherData` 结构体：
-  ```c
-  data.pm25 = 35.0f;
-  data.temperature = 22.0f;
-  data.wind_speed = 12.0f;
-  data.timestamp = current_time;
-  data.valid = true;
-  ```
-- 保存到缓存
-- 函数返回 `ESP_OK`
-
-#### Scenario: 获取天气数据（网络失败）
-
-**Given** WiFi 未连接或 API 服务器不可达
-**When** 调用 `weather_api_fetch(&data)`
-**Then**
-- HTTPS 请求超时（10秒）
-- 函数返回 `ESP_FAIL`
-- 缓存数据不变
-
-#### Scenario: 使用缓存数据（缓存有效）
-
-**Given** 上次成功获取天气数据的时间为 15 分钟前
-**When** 调用 `weather_api_get_cached(&data)`
-**Then**
-- 从缓存中读取数据
-- 填充 `WeatherData` 结构体
-- 缓存标记为有效（`data.valid = true`）
-
-#### Scenario: 检查缓存是否过期
-
-**Given** 上次成功获取天气数据的时间为 40 分钟前
-**When** 调用 `weather_api_is_cache_stale()`
-**Then** 返回 `true`（缓存已过期）
-
-**Given** 上次成功获取天气数据的时间为 10 分钟前
-**When** 调用 `weather_api_is_cache_stale()`
-**Then** 返回 `false`（缓存仍有效）
-
----
-
 ### Requirement: MQTT 客户端
 
-MQTT 客户端 MUST 提供初始化、状态发布、告警发布功能。
+MQTT 客户端 MUST 提供初始化、状态发布、告警发布和命令订阅功能。
 
-**实现状态变更**：从桩函数升级为完整实现，所有场景的行为保持不变。
+**变更说明**: 新增命令订阅功能，用于接收远程服务器的风扇控制命令。
 
-#### Scenario: 初始化 MQTT 客户端
+#### Scenario: 初始化 MQTT 客户端（保持不变）
 
-**Given** 系统配置中有 EMQX Cloud 连接信息（URL、用户名、密码）
+**Given** 系统配置中有 EMQX Cloud 连接信息
 **When** 调用 `mqtt_client_init()`
 **Then**
 - 创建 MQTT 客户端实例
-- 配置 TLS 连接（启用 `esp_crt_bundle_attach`）
-- 设置遗嘱消息（Last Will）：`home/ventilation/status` → `{"online": false}`
+- 配置 TLS 连接
+- 设置遗嘱消息
 - 尝试连接到 Broker
 - 函数返回 `ESP_OK`
 
-#### Scenario: 发布设备状态（正常模式）
+#### Scenario: 发布设备状态（保持不变）
 
 **Given** MQTT 已连接
-**When** 调用 `mqtt_publish_status(&sensor_data, FAN_LOW, MODE_NORMAL)`
+**When** 调用 `mqtt_publish_status(&sensor_data, FAN_LOW, MODE_REMOTE)`
 **Then**
-- 构建 JSON 消息：
-  ```json
-  {
-    "co2": 850,
-    "temp": 24.5,
-    "humi": 58,
-    "fan_state": "LOW",
-    "mode": "NORMAL",
-    "timestamp": 1700000000
-  }
-  ```
+- 构建 JSON 消息
 - 发布到主题 `home/ventilation/status`，QoS 0
 - 函数返回 `ESP_OK`
 
-#### Scenario: 发布告警消息
+---
 
-**Given** CO₂ 浓度超过 1500ppm
-**When** 调用 `mqtt_publish_alert("CO₂过高：1520ppm")`
+### Requirement: MQTT 命令订阅
+
+MQTT 客户端 MUST 订阅远程控制命令主题，并提供命令获取接口。
+
+#### Scenario: 连接成功后订阅命令主题
+
+**Given** MQTT 连接成功
+**When** 收到 `MQTT_EVENT_CONNECTED` 事件
 **Then**
-- 构建 JSON 消息：
-  ```json
-  {
-    "alert": "CO₂过高：1520ppm",
-    "level": "WARNING",
-    "timestamp": 1700000000
-  }
-  ```
-- 发布到主题 `home/ventilation/alert`，QoS 1（保证送达）
-- 函数返回 `ESP_OK`
+- 自动订阅主题 `home/ventilation/command`，QoS 1
+- 日志记录订阅成功
 
-#### Scenario: MQTT 断开后自动重连
+#### Scenario: 接收风扇控制命令
+
+**Given** MQTT 已连接并订阅命令主题
+**When** 收到消息：
+```json
+{
+  "fan_state": "HIGH"
+}
+```
+**Then**
+- 解析 JSON 获取 `fan_state` 字段
+- 转换为 `FanState` 枚举值
+- 存储到内部缓冲区
+- 日志记录收到的命令
+
+#### Scenario: 获取最新远程命令
+
+**Given** 已收到远程命令 `{"fan_state": "LOW"}`
+**When** 调用 `mqtt_get_remote_command(&fan_state)`
+**Then**
+- `fan_state` 被设置为 `FAN_LOW`
+- 函数返回 `true`
+
+#### Scenario: 无有效远程命令
+
+**Given** 未收到任何远程命令
+**When** 调用 `mqtt_get_remote_command(&fan_state)`
+**Then**
+- `fan_state` 不被修改
+- 函数返回 `false`
+
+#### Scenario: 命令格式错误
 
 **Given** MQTT 已连接
-**When** Broker 重启导致连接断开
+**When** 收到无效消息 `{"invalid": "data"}`
 **Then**
-- 检测到断开事件
-- 触发后台重连任务（通过定时器或独立任务，避免阻塞事件回调）
-- 等待 30 秒后自动重连
-- 重连成功后恢复正常发布
+- 日志记录解析错误
+- 不更新内部命令缓冲区
 
-#### Scenario: WiFi 断开时 MQTT 发布失败
+---
 
-**Given** WiFi 未连接
-**When** 调用 `mqtt_publish_status(&sensor_data, FAN_LOW)`
+### Requirement: 传感器数据有效性检查
+
+MQTT 状态发布 MUST 仅在传感器数据有效时执行。
+
+#### Scenario: 传感器数据有效时发布
+
+**Given** `sensor->valid == true`
+**When** 调用 `mqtt_publish_status(&sensor, fan, mode)`
+**Then** 正常发布状态消息
+
+#### Scenario: 传感器数据无效时跳过发布
+
+**Given** `sensor->valid == false`
+**When** 调用 `mqtt_publish_status(&sensor, fan, mode)`
 **Then**
-- 检测到 MQTT 客户端未连接
+- 日志记录跳过原因
 - 函数返回 `ESP_FAIL`
-- 不阻塞，立即返回
 
