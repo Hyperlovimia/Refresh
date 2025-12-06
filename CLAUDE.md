@@ -50,8 +50,8 @@ Refresh/
 │   │   ├── local_mode.c
 │   │   └── local_mode.h
 │   ├── network/               # Network communication
-│   │   ├── mqtt_client.c
-│   │   ├── mqtt_client.h
+│   │   ├── mqtt_wrapper.c
+│   │   ├── mqtt_wrapper.h
 │   │   ├── weather_api.c
 │   │   ├── weather_api.h
 │   │   ├── wifi_manager.c

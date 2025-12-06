@@ -21,8 +21,8 @@
  */
 typedef enum {
     STATE_INIT,         ///< 初始化状态（模块启动）
-    STATE_PREHEATING,   ///< 预热状态（60秒，CO?传感器预热）
-    STATE_STABILIZING,  ///< 稳定状态（240秒，CO?传感器稳定）
+    STATE_PREHEATING,   ///< 预热状态（60秒，CO2传感器预热）
+    STATE_STABILIZING,  ///< 稳定状态（240秒，CO2传感器稳定）
     STATE_RUNNING,      ///< 正常运行状态
     STATE_ERROR         ///< 错误状态（传感器故障，安全停机）
 } SystemState;
@@ -33,7 +33,7 @@ typedef enum {
 typedef enum {
     MODE_NORMAL,    ///< 正常模式（WiFi + 天气数据 + 完整算法）
     MODE_DEGRADED,  ///< 降级模式（WiFi 断开但缓存有效）
-    MODE_LOCAL,     ///< 本地模式（网络离线 >30min，仅 CO? 决策）
+    MODE_LOCAL,     ///< 本地模式（网络离线 >30min，仅 CO2 决策）
     MODE_SAFE_STOP  ///< 安全停机（传感器故障）
 } SystemMode;
 
@@ -87,17 +87,17 @@ typedef struct {
 // ============================================================================
 
 // 预热和稳定时间常量
-#define PREHEATING_TIME_SEC     60      ///< CO? 传感器预热时间（秒）
-#define STABILIZING_TIME_SEC    240     ///< CO? 传感器稳定时间（秒）
+#define PREHEATING_TIME_SEC     60      ///< CO2 传感器预热时间（秒）
+#define STABILIZING_TIME_SEC    240     ///< CO2 传感器稳定时间（秒）
 
 // 决策阈值常量
-#define CO2_THRESHOLD_LOW       1000.0f ///< CO? 低速阈值（ppm）
-#define CO2_THRESHOLD_HIGH      1200.0f ///< CO? 高速阈值（ppm）
-#define CO2_ALERT_THRESHOLD     1500.0f ///< CO? 告警阈值（ppm）
+#define CO2_THRESHOLD_LOW       1000.0f ///< CO2 低速阈值（ppm）
+#define CO2_THRESHOLD_HIGH      1200.0f ///< CO2 高速阈值（ppm）
+#define CO2_ALERT_THRESHOLD     1500.0f ///< CO2 告警阈值（ppm）
 
 // 数据有效性范围
-#define CO2_MIN_VALID           300.0f  ///< CO? 最小有效值（ppm）
-#define CO2_MAX_VALID           5000.0f ///< CO? 最大有效值（ppm）
+#define CO2_MIN_VALID           300.0f  ///< CO2 最小有效值（ppm）
+#define CO2_MAX_VALID           5000.0f ///< CO2 最大有效值（ppm）
 #define PM_MIN_VALID            0.0f    ///< 颗粒物最小有效值（μg/m³）
 #define PM_MAX_VALID            500.0f  ///< 颗粒物最大有效值（μg/m³）
 #define VOC_MIN_VALID           0.0f    ///< VOC 最小有效值（μg/m³）
