@@ -51,14 +51,24 @@ typedef enum {
 // ============================================================================
 
 /**
+ * @brief 室内污染物数据结构
+ */
+typedef struct {
+    float co2;    ///< CO₂ 浓度（ppm），实际硬件采集
+    float pm;     ///< 颗粒物浓度（μg/m³），预留接口
+    float voc;    ///< 挥发性有机物（μg/m³），预留接口
+    float hcho;   ///< 甲醛浓度（mg/m³），预留接口
+} IndoorPollutants;
+
+/**
  * @brief 传感器数据结构
  */
 typedef struct {
-    float co2;          ///< CO? 浓度（ppm）
-    float temperature;  ///< 温度（摄氏度）
-    float humidity;     ///< 相对湿度（%）
-    time_t timestamp;   ///< 数据时间戳
-    bool valid;         ///< 数据有效标志
+    IndoorPollutants pollutants;  ///< 室内污染物数据
+    float temperature;            ///< 温度（摄氏度）
+    float humidity;               ///< 相对湿度（%）
+    time_t timestamp;             ///< 数据时间戳
+    bool valid;                   ///< 数据有效标志
 } SensorData;
 
 /**
@@ -88,6 +98,12 @@ typedef struct {
 // 数据有效性范围
 #define CO2_MIN_VALID           300.0f  ///< CO? 最小有效值（ppm）
 #define CO2_MAX_VALID           5000.0f ///< CO? 最大有效值（ppm）
+#define PM_MIN_VALID            0.0f    ///< 颗粒物最小有效值（μg/m³）
+#define PM_MAX_VALID            500.0f  ///< 颗粒物最大有效值（μg/m³）
+#define VOC_MIN_VALID           0.0f    ///< VOC 最小有效值（μg/m³）
+#define VOC_MAX_VALID           1000.0f ///< VOC 最大有效值（μg/m³）
+#define HCHO_MIN_VALID          0.0f    ///< 甲醛最小有效值（mg/m³）
+#define HCHO_MAX_VALID          1.0f    ///< 甲醛最大有效值（mg/m³）
 #define TEMP_MIN_VALID          -10.0f  ///< 温度最小有效值（℃）
 #define TEMP_MAX_VALID          50.0f   ///< 温度最大有效值（℃）
 #define HUMI_MIN_VALID          0.0f    ///< 湿度最小有效值（%）

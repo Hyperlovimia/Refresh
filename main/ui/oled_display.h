@@ -37,8 +37,8 @@ void oled_display_alert(const char *message);
 
 /**
  * @brief 添加历史图表点
- * @param co2 CO2 浓度 ppm
+ * @param sensor 传感器数据
  */
-void oled_add_history_point(float co2);
+void oled_add_history_point(SensorData *sensor);
 
 #endif // OLED_DISPLAY_H

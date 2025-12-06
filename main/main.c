@@ -228,9 +228,9 @@ static void sensor_task(void *pvParameters) {
         xSemaphoreGive(data_mutex);
 
         // 检查CO₂告警
-        if (data.valid && data.co2 > CO2_ALERT_THRESHOLD) {
+        if (data.valid && data.pollutants.co2 > CO2_ALERT_THRESHOLD) {
             char alert_msg[64];
-            snprintf(alert_msg, sizeof(alert_msg), "CO₂浓度过高: %.0f ppm", data.co2);
+            snprintf(alert_msg, sizeof(alert_msg), "CO₂浓度过高: %.0f ppm", data.pollutants.co2);
 
             // 发送到显示队列
             xQueueSend(alert_queue, &alert_msg, 0);

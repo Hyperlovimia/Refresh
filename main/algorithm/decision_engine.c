@@ -23,14 +23,14 @@ FanState decision_make(SensorData *sensor, WeatherData *weather, SystemMode mode
 
     // MODE_LOCAL 模式下根据 CO2 决策
     if (mode == MODE_LOCAL) {
-        return local_mode_decide(sensor->co2);
+        return local_mode_decide(sensor->pollutants.co2);
     }
 
     // MODE_NORMAL 或 MODE_DEGRADED 模式下基于 Benefit-Cost 决策
     // 注意: 系统模式契约保证 MODE_DEGRADED 时 weather->valid=true (缓存有效)
 
     // 1. 归一化计算
-    float indoor_quality = (sensor->co2 - CO2_BASELINE) / CO2_RANGE;
+    float indoor_quality = (sensor->pollutants.co2 - CO2_BASELINE) / CO2_RANGE;
     float outdoor_quality = weather->pm25 / PM25_RANGE;
     float temp_diff = fabsf(sensor->temperature - weather->temperature);
 

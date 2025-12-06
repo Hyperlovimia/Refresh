@@ -233,7 +233,7 @@ esp_err_t mqtt_publish_status(SensorData *sensor, FanState fan, SystemMode mode)
         return ESP_FAIL;
     }
 
-    cJSON_AddNumberToObject(root, "co2", sensor->co2);
+    cJSON_AddNumberToObject(root, "co2", sensor->pollutants.co2);
     cJSON_AddNumberToObject(root, "temp", sensor->temperature);
     cJSON_AddNumberToObject(root, "humi", sensor->humidity);
     cJSON_AddStringToObject(root, "fan_state", fan_state_to_string(fan));

@@ -14,6 +14,7 @@ static const char *TAG = "SENSOR_MGR";
 static int failure_count = 0;
 static float last_valid_co2 = -1.0f;  // 上次有效的 CO₂ 浓度值
 static bool has_valid_cache = false;  // 是否有有效的缓存值
+static IndoorPollutants manual_pollutants = {0};  // 手动注入的污染物数据
 
 esp_err_t sensor_manager_init(void) {
     ESP_LOGI(TAG, "初始化传感器管理器");
@@ -36,6 +37,10 @@ esp_err_t sensor_manager_init(void) {
     failure_count = 0;
     last_valid_co2 = -1.0f;
     has_valid_cache = false;
+    manual_pollutants.co2 = 0.0f;
+    manual_pollutants.pm = 0.0f;
+    manual_pollutants.voc = 0.0f;
+    manual_pollutants.hcho = 0.0f;
     return ESP_OK;
 }
 
@@ -57,18 +62,23 @@ esp_err_t sensor_manager_read_all(SensorData *data) {
         // 连续失败 3 次后，使用上次有效值
         if (failure_count >= 3 && has_valid_cache) {
             ESP_LOGW(TAG, "使用缓存的 CO₂ 值：%.1f ppm", last_valid_co2);
-            data->co2 = last_valid_co2;
+            data->pollutants.co2 = last_valid_co2;
             using_cache = true;  // 标记使用缓存
         } else {
-            data->co2 = co2_value;  // 使用无效值（-1.0f）
+            data->pollutants.co2 = co2_value;  // 使用无效值（-1.0f）
         }
     } else {
         // CO₂ 读取成功，更新缓存
-        data->co2 = co2_value;
+        data->pollutants.co2 = co2_value;
         last_valid_co2 = co2_value;
         has_valid_cache = true;
         failure_count = 0;
     }
+
+    // 填充其他污染物数据（手动注入值）
+    data->pollutants.pm = manual_pollutants.pm;
+    data->pollutants.voc = manual_pollutants.voc;
+    data->pollutants.hcho = manual_pollutants.hcho;
 
     // 读取 SHT35 温湿度（加 I2C 锁保护）
     SemaphoreHandle_t i2c_mutex = get_i2c_mutex();
@@ -134,5 +144,25 @@ esp_err_t sensor_manager_reinit(void) {
     }
 
     ESP_LOGI(TAG, "传感器管理器重新初始化成功");
+    return ESP_OK;
+}
+
+esp_err_t sensor_manager_set_pollutant(PollutantType type, float value) {
+    switch (type) {
+        case POLLUTANT_PM:
+            manual_pollutants.pm = value;
+            ESP_LOGI(TAG, "设置 PM 值：%.1f μg/m³", value);
+            break;
+        case POLLUTANT_VOC:
+            manual_pollutants.voc = value;
+            ESP_LOGI(TAG, "设置 VOC 值：%.1f μg/m³", value);
+            break;
+        case POLLUTANT_HCHO:
+            manual_pollutants.hcho = value;
+            ESP_LOGI(TAG, "设置 HCHO 值：%.2f mg/m³", value);
+            break;
+        default:
+            return ESP_ERR_INVALID_ARG;
+    }
     return ESP_OK;
 }

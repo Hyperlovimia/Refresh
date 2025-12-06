@@ -44,7 +44,7 @@ void oled_display_alert(const char *message) {
     }
 }
 
-void oled_add_history_point(float co2) {
+void oled_add_history_point(SensorData *sensor) {
     // TODO: 实现 - 添加历史数据点到环形缓冲区
-    ESP_LOGD(TAG, "添加历史点: %.1f ppm", co2);
+    ESP_LOGD(TAG, "添加历史点: %.1f ppm", sensor->pollutants.co2);
 }

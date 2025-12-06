@@ -37,4 +37,21 @@ bool sensor_manager_is_healthy(void);
  */
 esp_err_t sensor_manager_reinit(void);
 
+/**
+ * @brief 污染物类型枚举
+ */
+typedef enum {
+    POLLUTANT_PM,    ///< 颗粒物
+    POLLUTANT_VOC,   ///< 挥发性有机物
+    POLLUTANT_HCHO   ///< 甲醛
+} PollutantType;
+
+/**
+ * @brief 手动设置污染物数据（用于测试和模拟）
+ * @param type 污染物类型
+ * @param value 污染物数值
+ * @return ESP_OK 成功，ESP_ERR_INVALID_ARG 参数无效
+ */
+esp_err_t sensor_manager_set_pollutant(PollutantType type, float value);
+
 #endif // SENSOR_MANAGER_H
