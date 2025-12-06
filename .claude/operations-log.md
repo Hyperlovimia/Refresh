@@ -114,3 +114,13 @@
 2025-12-03 15:24 (UTC+8) | apply_patch | 记录计划更新（阶段4）
 2025-12-03 15:25 (UTC+8) | plan.update | 审查计划全部完成
 2025-12-03 15:25 (UTC+8) | apply_patch | 记录最终计划更新
+2025-12-06 21:04 (UTC+8) | shell(cat openspec/AGENTS.md) | 阅读最新 AGENTS 指令，确认审查流程要求
+2025-12-06 21:05 (UTC+8) | sequential-thinking | “extend indoor pollutants” 审查 7 步推理记录
+2025-12-06 21:06 (UTC+8) | plan.update | 建立三步审查计划（上下文→分析→交付）
+2025-12-06 21:07 (UTC+8) | shell(git status/log/show) | 查看工作树状态与 46515c2 diff 概览
+2025-12-06 21:08 (UTC+8) | shell(git show main/*.c|h) | 逐文件审阅 main.h、sensor_manager、decision_engine、main.c、mqtt_wrapper、oled_display 变更
+2025-12-06 21:10 (UTC+8) | shell(rg/sed openspec) | 检索 pollutants/co2 引用及相关 spec/task 文档
+2025-12-06 21:12 (UTC+8) | plan.update | 将计划推进至“代码分析”阶段
+2025-12-06 21:13 (UTC+8) | shell(nl main/* openspec/specs) | 提取行号用于引用（sensor_manager、main.h、oled_display、system-orchestration、UI spec）
+2025-12-06 21:17 (UTC+8) | apply_patch | 更新 `.claude/context-codex.md` 记录本次审查的接口与风险
+2025-12-06 21:18 (UTC+8) | apply_patch | 将室内污染物扩展审查结果写入 `.claude/review-report.md`

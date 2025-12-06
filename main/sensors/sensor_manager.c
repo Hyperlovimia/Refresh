@@ -128,6 +128,10 @@ esp_err_t sensor_manager_reinit(void) {
     failure_count = 0;
     last_valid_co2 = -1.0f;
     has_valid_cache = false;
+    manual_pollutants.co2 = 0.0f;
+    manual_pollutants.pm = 0.0f;
+    manual_pollutants.voc = 0.0f;
+    manual_pollutants.hcho = 0.0f;
 
     // 重新初始化 CO2 传感器
     esp_err_t ret = co2_sensor_init();
@@ -150,14 +154,20 @@ esp_err_t sensor_manager_reinit(void) {
 esp_err_t sensor_manager_set_pollutant(PollutantType type, float value) {
     switch (type) {
         case POLLUTANT_PM:
+            if (value < PM_MIN_VALID) value = PM_MIN_VALID;
+            if (value > PM_MAX_VALID) value = PM_MAX_VALID;
             manual_pollutants.pm = value;
             ESP_LOGI(TAG, "设置 PM 值：%.1f μg/m³", value);
             break;
         case POLLUTANT_VOC:
+            if (value < VOC_MIN_VALID) value = VOC_MIN_VALID;
+            if (value > VOC_MAX_VALID) value = VOC_MAX_VALID;
             manual_pollutants.voc = value;
             ESP_LOGI(TAG, "设置 VOC 值：%.1f μg/m³", value);
             break;
         case POLLUTANT_HCHO:
+            if (value < HCHO_MIN_VALID) value = HCHO_MIN_VALID;
+            if (value > HCHO_MAX_VALID) value = HCHO_MAX_VALID;
             manual_pollutants.hcho = value;
             ESP_LOGI(TAG, "设置 HCHO 值：%.2f mg/m³", value);
             break;

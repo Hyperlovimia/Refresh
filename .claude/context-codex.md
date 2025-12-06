@@ -30,3 +30,22 @@
 ## 观察报告
 - `main/main.c:440-474` 依赖 `wifi_manager_init/weather_api_init/mqtt_client_init` 的返回值做日志提示，一旦 `wifi_manager_init` 改为永不返回失败就失去诊断价值。
 - 设计文档在非目标中声明“不实现 MQTT 订阅”（`design.md:33-35`），但规范（spec:151-161）要求初始化阶段即订阅 `home/ventilation/command`，需要澄清是否真正实现。
+
+# 室内污染物扩展审查上下文
+日期：2025-12-06 21:17 (UTC+8) — Codex
+
+## 主要代码触点
+- `main/main.h:60-110` 新增 `IndoorPollutants` 结构体并将 `SensorData` 的 CO₂ 字段替换为 `pollutants`，同时加入 PM/VOC/HCHO 合法范围常量。
+- `main/sensors/sensor_manager.c:17-168` 引入 `manual_pollutants` 缓存，在 `sensor_manager_read_all()` 中填充 `data.pollutants.*`，并提供 `sensor_manager_set_pollutant()` 手动注入接口。
+- `main/algorithm/decision_engine.c:23-35`、`main/main.c:223-236`、`main/network/mqtt_wrapper.c:233-242` 将所有 `sensor->co2` 访问改为 `sensor->pollutants.co2`。
+- `main/ui/oled_display.h:29-42` / `main/ui/oled_display.c:18-49` 将 `oled_add_history_point` 签名改为接收 `SensorData *`，内部读取 `sensor->pollutants.co2`。
+
+## 相关规范
+- `openspec/specs/user-interface/spec.md:144-166` 仍规定 `oled_add_history_point(float co2)` 并在场景中以浮点参数示例，尚未反映指针签名。
+- `openspec/specs/system-orchestration/spec.md:253-287` 要求 `sensor_manager_reinit()` “清空缓冲区和计数器”，用于 ERROR→INIT 恢复路径。
+- `openspec/changes/extend-indoor-pollutant-types/specs/sensor-integration/spec.md` 描述 `SensorData.pollutants.*` 数据结构以及手动注入场景，但 UI spec 未包含在变更范围。
+
+## 开放问题 / 风险
+1. UI 能力规范仍以旧函数签名示例，代码更改未在 `specs/user-interface` 追加 delta，可能导致 API 合同不一致。
+2. 新增的 PM/VOC/HCHO 合法范围常量目前未在 `sensor_manager_set_pollutant()` 或 `sensor_manager_read_all()` 中用于判定/夹取，`SensorData.valid` 仍只依赖 CO₂/温湿度。
+3. `sensor_manager_reinit()`（`main/sensors/sensor_manager.c:124-147`）仅重置 CO₂ 缓存与传感器，但未清空 `manual_pollutants`，可能与 spec “清空缓冲区” 要求不符，导致错误恢复后仍输出旧的手动数值。

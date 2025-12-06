@@ -147,9 +147,10 @@ OLED 显示模块 MUST 提供初始化功能，配置 I2C 通信和显示参数�
 
 #### Scenario: 添加趋势图数据点
 
-**Given** 当前 CO₂ 浓度为 900 ppm
-**When** 调用 `oled_add_history_point(900.0f)`
+**Given** 传感器数据包含 CO₂ 浓度 900 ppm
+**When** 调用 `oled_add_history_point(&sensor)`
 **Then**
+- 从 `sensor->pollutants.co2` 提取 CO₂ 数据点
 - 数据点添加到环形缓冲区（容量 48）
 - 如果缓冲区已满，覆盖最旧的数据点
 
