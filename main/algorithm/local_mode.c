@@ -10,6 +10,7 @@ static const char *TAG = "LOCAL_MODE";
 FanState local_mode_decide(float co2_ppm) {
     ESP_LOGD(TAG, "本地模式决策 CO2 = %.1f ppm", co2_ppm);
 
+    // TODO: 可以添加更多传感器数据和复杂逻辑
     // 基于 CO2 阈值决策风扇状态
     if (co2_ppm > CO2_THRESHOLD_HIGH) {
         return FAN_HIGH;
