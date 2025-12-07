@@ -27,7 +27,9 @@
   "co2": 850,
   "temp": 24.5,
   "humi": 58,
-  "fan_state": "LOW",
+  "fan_0": "LOW",
+  "fan_1": "HIGH",
+  "fan_2": "OFF",
   "mode": "REMOTE",
   "timestamp": 1701936000
 }
@@ -37,13 +39,13 @@
 - `co2`: CO₂ 浓度（ppm），浮点数
 - `temp`: 温度（℃），浮点数
 - `humi`: 湿度（%），浮点数
-- `fan_state`: 风扇状态，字符串枚举值：
+- `fan_0`, `fan_1`, `fan_2`: 3个风扇的独立状态，字符串枚举值：
   - `"OFF"` - 关闭
   - `"LOW"` - 低速
   - `"HIGH"` - 高速
 - `mode`: 系统运行模式，字符串枚举值：
   - `"REMOTE"` - 远程控制模式（WiFi 已连接）
-  - `"LOCAL"` - 本地自动模式（WiFi 未连接）
+  - `"LOCAL"` - 本地自动模式（WiFi 未连接，3风扇同步）
   - `"SAFE_STOP"` - 安全停机模式（传感器故障）
 - `timestamp`: Unix 时间戳（秒）
 
@@ -83,20 +85,24 @@
 **JSON 格式**:
 ```json
 {
-  "fan_state": "HIGH"
+  "fan_0": "HIGH",
+  "fan_1": "LOW",
+  "fan_2": "OFF"
 }
 ```
 
 **字段说明**:
-- `fan_state`: 目标风扇状态，字符串枚举值：
+- `fan_0`, `fan_1`, `fan_2`: 各风扇目标状态，字符串枚举值：
   - `"OFF"` - 关闭风扇
   - `"LOW"` - 设置为低速
   - `"HIGH"` - 设置为高速
+- **支持部分更新**：可以只发送需要修改的风扇，例如只发送 `{"fan_1": "HIGH"}` 仅修改风扇1
 
 **注意事项**:
 - 仅在系统处于 `MODE_REMOTE` 模式时生效
 - 命令会被缓存，决策任务会定期读取最新命令
 - 如果 WiFi 断开，系统会自动切换到 `MODE_LOCAL` 模式，忽略远程命令
+- 本地模式下，3个风扇会统一根据CO2传感器决策（暂时同步）
 
 ---
 
@@ -242,11 +248,11 @@ snprintf(client_id, sizeof(client_id), "esp32_%02x%02x%02x%02x%02x%02x",
 | 共享资源 | 保护机制 | 访问任务 |
 |---------|---------|---------|
 | `shared_sensor_data` | `data_mutex` (互斥锁) | sensor_task, decision_task, network_task, display_task |
-| `shared_fan_state` | `data_mutex` (互斥锁) | decision_task, network_task, display_task |
-| `s_remote_command` | 无锁（单写多读） | mqtt_event_handler (写), decision_task (读) |
+| `shared_fan_states[3]` | `data_mutex` (互斥锁) | decision_task, network_task, display_task |
+| `s_remote_command[3]` | 无锁（写入时原子性） | mqtt_event_handler (写), decision_task (读) |
 | `alert_queue` | FreeRTOS 队列 | sensor_task (写), display_task (读) |
 
-**注意**: `s_remote_command` 使用原子操作（单字节枚举），无需互斥锁保护。
+**注意**: `s_remote_command` 为数组，每个元素使用原子操作（单字节枚举），MQTT事件处理器单线程写入，决策任务只读。
 
 ---
 
@@ -261,13 +267,14 @@ snprintf(client_id, sizeof(client_id), "esp32_%02x%02x%02x%02x%02x%02x",
 
 **远程命令接收**:
 ```
-I (12345) MQTT_CLIENT: 收到远程命令: fan_state=HIGH
-I (12346) DECISION: 远程模式: fan_state=2
+I (12345) MQTT_CLIENT: 收到远程命令: fan_0=HIGH
+I (12346) MQTT_CLIENT: 收到远程命令: fan_1=LOW
+I (12347) DECISION: 远程模式: fan_0=2, fan_1=1, fan_2=0
 ```
 
 **状态上报**:
 ```
-I (12347) MQTT_CLIENT: 发布状态: {"co2":850,"temp":24.5,"humi":58,"fan_state":"LOW","mode":"REMOTE","timestamp":1701936000} (msg_id=123)
+I (12348) MQTT_CLIENT: 发布状态: {"co2":850,"temp":24.5,"humi":58,"fan_0":"LOW","fan_1":"HIGH","fan_2":"OFF","mode":"REMOTE","timestamp":1701936000} (msg_id=123)
 ```
 
 **MQTT 重连**:
@@ -294,8 +301,15 @@ I (42350) MQTT_CLIENT: MQTT 连接成功
 
 ### Q3: 如何测试远程命令？
 使用 MQTT 客户端工具（如 MQTTX）发布消息到 `home/ventilation/command`：
+
+**全部控制**：
 ```json
-{"fan_state": "HIGH"}
+{"fan_0": "HIGH", "fan_1": "LOW", "fan_2": "OFF"}
+```
+
+**部分控制**（只修改风扇1）：
+```json
+{"fan_1": "HIGH"}
 ```
 
 ---

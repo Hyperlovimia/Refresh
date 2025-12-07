@@ -24,16 +24,18 @@ esp_err_t mqtt_client_init(void);
  *   "co2": 850,
  *   "temp": 24.5,
  *   "humi": 58,
- *   "fan_state": "LOW",
+ *   "fan_0": "LOW",
+ *   "fan_1": "HIGH",
+ *   "fan_2": "OFF",
  *   "mode": "NORMAL"
  * }
  * QoS: 0
  * @param sensor 传感器数据
- * @param fan 风扇状态
+ * @param fans 3个风扇的状态数组
  * @param mode 系统运行模式
  * @return ESP_OK 成功，ESP_FAIL 失败
  */
-esp_err_t mqtt_publish_status(SensorData *sensor, FanState fan, SystemMode mode);
+esp_err_t mqtt_publish_status(SensorData *sensor, const FanState fans[FAN_COUNT], SystemMode mode);
 
 /**
  * @brief 发布告警到 home/ventilation/alert
@@ -46,9 +48,10 @@ esp_err_t mqtt_publish_alert(const char *message);
 /**
  * @brief 获取远程风扇控制命令
  * 从 home/ventilation/command 主题接收的最新命令
- * @param[out] cmd 输出风扇状态
+ * 命令格式: {"fan_0":"HIGH", "fan_1":"LOW", "fan_2":"OFF"}
+ * @param[out] cmd 输出3个风扇状态数组
  * @return true 有新命令，false 无命令或未连接
  */
-bool mqtt_get_remote_command(FanState *cmd);
+bool mqtt_get_remote_command(FanState cmd[FAN_COUNT]);
 
 #endif // MQTT_WRAPPER_H

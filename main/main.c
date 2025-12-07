@@ -36,7 +36,7 @@ static SystemMode current_mode = MODE_LOCAL;
 
 // 共享数据缓冲区
 static SensorData shared_sensor_data = {0};
-static FanState shared_fan_state = FAN_OFF;
+static FanState shared_fan_states[FAN_COUNT] = {FAN_OFF, FAN_OFF, FAN_OFF};
 
 // 同步对象
 static SemaphoreHandle_t data_mutex = NULL;
@@ -166,8 +166,15 @@ static void handle_error_state(void) {
         error_start = xTaskGetTickCount();
         ESP_LOGE(TAG, "进入 ERROR 状态（安全停机）");
 
-        // 关闭风扇
-        fan_control_set_state(FAN_OFF, false);
+        // 关闭所有风扇
+        fan_control_set_all(FAN_OFF, false);
+
+        // 更新共享状态，确保 MQTT/UI 显示与硬件一致
+        xSemaphoreTake(data_mutex, portMAX_DELAY);
+        for (int i = 0; i < FAN_COUNT; i++) {
+            shared_fan_states[i] = FAN_OFF;
+        }
+        xSemaphoreGive(data_mutex);
 
         // 显示告警
         oled_display_alert("传感器故障");
@@ -248,8 +255,8 @@ static void sensor_task(void *pvParameters) {
  */
 static void decision_task(void *pvParameters) {
     SensorData sensor;
-    FanState new_state;
-    FanState remote_cmd;
+    FanState new_states[FAN_COUNT];
+    FanState remote_cmd[FAN_COUNT] = {FAN_OFF, FAN_OFF, FAN_OFF};
 
     ESP_LOGI(TAG, "决策任务启动");
 
@@ -263,7 +270,8 @@ static void decision_task(void *pvParameters) {
         // 读取共享数据
         xSemaphoreTake(data_mutex, portMAX_DELAY);
         memcpy(&sensor, &shared_sensor_data, sizeof(SensorData));
-        FanState old_state = shared_fan_state;
+        FanState old_states[FAN_COUNT];
+        memcpy(old_states, shared_fan_states, sizeof(old_states));
         xSemaphoreGive(data_mutex);
 
         // 检测运行模式
@@ -273,7 +281,7 @@ static void decision_task(void *pvParameters) {
 
         // MODE_REMOTE 时获取远程命令，无命令则保持当前状态
         if (current_mode == MODE_REMOTE) {
-            if (!mqtt_get_remote_command(&remote_cmd)) {
+            if (!mqtt_get_remote_command(remote_cmd)) {
                 ESP_LOGD(TAG, "远程模式：无新命令，保持当前状态");
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 continue;
@@ -281,19 +289,27 @@ static void decision_task(void *pvParameters) {
         }
 
         // 执行决策
-        new_state = decision_make(&sensor, remote_cmd, current_mode);
+        decision_make(&sensor, remote_cmd, current_mode, new_states);
 
         // 设置风扇状态
         bool is_night = false;
+        bool state_changed = false;
 
-        if (new_state != old_state) {
-            fan_control_set_state(new_state, is_night);
+        for (int i = 0; i < FAN_COUNT; i++) {
+            if (new_states[i] != old_states[i]) {
+                fan_control_set_state((FanId)i, new_states[i], is_night);
+                state_changed = true;
+            }
+        }
 
+        if (state_changed) {
             xSemaphoreTake(data_mutex, portMAX_DELAY);
-            shared_fan_state = new_state;
+            memcpy(shared_fan_states, new_states, sizeof(shared_fan_states));
             xSemaphoreGive(data_mutex);
 
-            ESP_LOGI(TAG, "风扇状态变化: %d → %d", old_state, new_state);
+            ESP_LOGI(TAG, "风扇状态变化: [%d,%d,%d] → [%d,%d,%d]",
+                     old_states[0], old_states[1], old_states[2],
+                     new_states[0], new_states[1], new_states[2]);
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000)); // 1Hz
@@ -305,7 +321,7 @@ static void decision_task(void *pvParameters) {
  */
 static void network_task(void *pvParameters) {
     SensorData sensor;
-    FanState fan;
+    FanState fans[FAN_COUNT];
     uint32_t last_mqtt_publish = 0;
 
     ESP_LOGI(TAG, "网络任务启动");
@@ -325,12 +341,12 @@ static void network_task(void *pvParameters) {
             if (wifi_manager_is_connected()) {
                 if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                     memcpy(&sensor, &shared_sensor_data, sizeof(SensorData));
-                    fan = shared_fan_state;
+                    memcpy(fans, shared_fan_states, sizeof(fans));
                     xSemaphoreGive(data_mutex);
 
                     // 仅在传感器数据有效时发布
                     if (sensor.valid) {
-                        esp_err_t ret = mqtt_publish_status(&sensor, fan, current_mode);
+                        esp_err_t ret = mqtt_publish_status(&sensor, fans, current_mode);
                         if (ret != ESP_OK) {
                             ESP_LOGW(TAG, "MQTT 状态发布失败");
                         }
@@ -367,7 +383,7 @@ static void display_task(void *pvParameters) {
         if (current_state == STATE_RUNNING) {
             xSemaphoreTake(data_mutex, portMAX_DELAY);
             memcpy(&sensor, &shared_sensor_data, sizeof(SensorData));
-            fan = shared_fan_state;
+            fan = shared_fan_states[0];  // 暂时显示第一个风扇状态
             xSemaphoreGive(data_mutex);
 
             oled_display_main_page(&sensor, NULL, fan, current_mode);

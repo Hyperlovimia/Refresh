@@ -2,7 +2,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: MQTT 多风扇命令订阅
+### Requirement: MQTT 命令订阅
 
 MQTT 客户端 MUST 支持接收3个风扇的独立控制命令。
 
@@ -79,7 +79,7 @@ MQTT 客户端 MUST 支持接收3个风扇的独立控制命令。
 
 ---
 
-### Requirement: MQTT 多风扇状态上报
+### Requirement: MQTT 客户端
 
 MQTT 客户端 MUST 在状态上报中包含3个风扇的独立状态。
 

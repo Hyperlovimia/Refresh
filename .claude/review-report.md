@@ -117,3 +117,39 @@
 - MODE_REMOTE 建议在 `mqtt_get_remote_command()` 返回 false 时直接维持 `shared_fan_state`，或引入显式的 `FAN_INVALID`/`bool has_cmd` 逻辑，与 spec 场景对齐并记录日志。
 - `mqtt_publish_status` 与调用方应在 `sensor->valid == false` 时返回 `ESP_FAIL` + warning；network_task 收到失败后也应延迟下次发布，避免刷屏。
 - menuconfig/README 需移除天气配置章节或标注“由远程服务器负责”，同时更新状态 JSON 示例中的 `mode` 字段值（现已改为 `REMOTE/LOCAL/SAFE_STOP`）。
+
+---
+
+# 审查报告 — expand-multi-fan-control
+日期：2025-12-07 18:05 (UTC+8)  
+审查人：Codex
+
+## 结论
+- 综合评分：68/100  
+- 建议：需讨论（主要功能已落地，但状态同步与文档/接口契约仍有重大缺口）
+
+## 技术维度评分
+- 代码正确性：70 — 多风扇 PWM、MQTT 解析/发布逻辑基本符合 spec，但状态同步遗漏导致实际上报与硬件脱节。
+- 需求符合度：60 — 规格要求的“状态 JSON 反映所有风扇”的行为在 ERROR 场景失真，且官方指南仍宣称旧协议。
+- 测试与可验证性：55 — 仅有编译日志，无针对 ERROR 场景或新 MQTT 协议的验证记录/示例。
+
+## 战略维度评分
+- 需求匹配：65 — 多风扇控制方向正确，但用户-facing 指南未同步，导致生态/客户端无法按新协议交互。
+- 风险识别：60 — 代码注释提到“显示任务暂时使用 Fan0”，但未提及 ERROR 状态或文档迁移风险。
+
+## 主要发现
+1. **ERROR 状态关闭风扇但共享状态未复位，MQTT/UI 会继续显示旧值**  
+   - `handle_error_state()` 仅调用 `fan_control_set_all(FAN_OFF, false)`（`main/main.c:162-175`），没有在 `data_mutex` 内把 `shared_fan_states` 更新为全 OFF。  
+   - `network_task` 和 `display_task` 仍直接 memcpy `shared_fan_states` 来上报/显示（`main/main.c:335-343`, `375-383`），因此安全停机后远端会继续看到旧的 `[HIGH,...]` 状态。  
+   - 这与多风扇网络规范“上报的 fan_0/fan_1/fan_2 应反映真实硬件”要求（`openspec/changes/expand-multi-fan-control/specs/network-services/spec.md:87-118`）冲突，也让告警时无法确认设备是否真正停机。  
+   - **建议**：在 ERROR 进入分支中获取 `data_mutex`，把 `shared_fan_states` 清零并记录日志，使 MQTT/UI 的 `fan_x` 字段与硬件一致；必要时也复位 `remote_cmd` 缓冲。
+
+2. **MQTT 指南仍记录单风扇协议，远程控制端按文档操作会被系统忽略**  
+   - `Guides/MQTT.md` 多处示例 JSON 仍是 `fan_state` 单字段（`Guides/MQTT.md:24-120, 262-299`），还强调 `shared_fan_state` 共享变量（`Guides/MQTT.md:245-299`）。  
+   - 实际实现只解析 `fan_0`~`fan_2`（`main/network/mqtt_wrapper.c:93-111`）并在状态上报输出同名字段（`main/network/mqtt_wrapper.c:295-307`）；旧字段完全不会再被读取。  
+   - 若参考官方指南发送 `{"fan_state":"HIGH"}`，`parse_remote_command()` 会忽略整个命令，远程控制功能对现有客户端等同于失效。  
+   - **建议**：同步更新 `Guides/MQTT.md`/README/外部接口描述，或临时保留对 `fan_state` 的兼容解析并记录废弃警告，确保生态伙伴能知晓协议变更。
+
+## 残留风险与建议
+- 补充 ERROR 场景下的 `shared_fan_states` 与 MQTT 上报同步逻辑，并考虑添加单元测试或日志验证。
+- 尽快更新 MQTT/系统文档，说明 fan_0~fan_2 的命名、示例 payload 以及 `shared_fan_states` 互斥保护方式；若需要平滑迁移，可在 `parse_remote_command()` 中继续接受 `fan_state` 并广播到 3 个元素，同时在日志中提示旧字段将废弃。

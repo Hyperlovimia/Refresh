@@ -29,7 +29,7 @@ static const char *TAG = "MQTT_CLIENT";
 static esp_mqtt_client_handle_t s_mqtt_client = NULL;
 static bool s_mqtt_connected = false;
 static TimerHandle_t s_reconnect_timer = NULL;
-static FanState s_remote_command = FAN_OFF;
+static FanState s_remote_command[FAN_COUNT] = {FAN_OFF, FAN_OFF, FAN_OFF};
 static bool s_command_received = false;
 
 /**
@@ -78,7 +78,7 @@ static FanState string_to_fan_state(const char *str)
 }
 
 /**
- * @brief 解析远程命令 JSON
+ * @brief 解析远程命令 JSON（支持多风扇）
  */
 static void parse_remote_command(const char *data, int len)
 {
@@ -88,11 +88,23 @@ static void parse_remote_command(const char *data, int len)
         return;
     }
 
-    cJSON *fan_state = cJSON_GetObjectItem(root, "fan_state");
-    if (cJSON_IsString(fan_state)) {
-        s_remote_command = string_to_fan_state(fan_state->valuestring);
+    bool has_command = false;
+
+    // 解析 fan_0, fan_1, fan_2
+    for (int i = 0; i < FAN_COUNT; i++) {
+        char key[16];
+        snprintf(key, sizeof(key), "fan_%d", i);
+
+        cJSON *fan_state = cJSON_GetObjectItem(root, key);
+        if (cJSON_IsString(fan_state)) {
+            s_remote_command[i] = string_to_fan_state(fan_state->valuestring);
+            has_command = true;
+            ESP_LOGI(TAG, "收到远程命令: %s=%s", key, fan_state->valuestring);
+        }
+    }
+
+    if (has_command) {
         s_command_received = true;
-        ESP_LOGI(TAG, "收到远程命令: fan_state=%s", fan_state->valuestring);
     }
 
     cJSON_Delete(root);
@@ -257,7 +269,7 @@ esp_err_t mqtt_client_init(void)
     return ESP_OK;
 }
 
-esp_err_t mqtt_publish_status(SensorData *sensor, FanState fan, SystemMode mode)
+esp_err_t mqtt_publish_status(SensorData *sensor, const FanState fans[FAN_COUNT], SystemMode mode)
 {
     if (!sensor) {
         return ESP_ERR_INVALID_ARG;
@@ -278,7 +290,14 @@ esp_err_t mqtt_publish_status(SensorData *sensor, FanState fan, SystemMode mode)
     cJSON_AddNumberToObject(root, "co2", sensor->pollutants.co2);
     cJSON_AddNumberToObject(root, "temp", sensor->temperature);
     cJSON_AddNumberToObject(root, "humi", sensor->humidity);
-    cJSON_AddStringToObject(root, "fan_state", fan_state_to_string(fan));
+
+    // 添加3个风扇状态
+    for (int i = 0; i < FAN_COUNT; i++) {
+        char key[16];
+        snprintf(key, sizeof(key), "fan_%d", i);
+        cJSON_AddStringToObject(root, key, fan_state_to_string(fans[i]));
+    }
+
     cJSON_AddStringToObject(root, "mode", system_mode_to_string(mode));
 
     struct timeval tv;
@@ -360,11 +379,13 @@ esp_err_t mqtt_publish_alert(const char *message)
     return ESP_OK;
 }
 
-bool mqtt_get_remote_command(FanState *cmd)
+bool mqtt_get_remote_command(FanState cmd[FAN_COUNT])
 {
     if (!cmd || !s_mqtt_connected || !s_command_received) {
         return false;
     }
-    *cmd = s_remote_command;
+    for (int i = 0; i < FAN_COUNT; i++) {
+        cmd[i] = s_remote_command[i];
+    }
     return true;
 }

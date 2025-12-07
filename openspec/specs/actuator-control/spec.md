@@ -5,81 +5,105 @@ TBD - created by archiving change implement-air-quality-system. Update Purpose a
 ## Requirements
 ### Requirement: 风扇控制接口
 
-系统 MUST 使用 LEDC 外设生成 25kHz PWM 信号，并根据风扇状态和昼夜模式映射到正确的占空比，同时保护 PWM 范围防止风扇启动失败。
+系统 MUST 支持3个独立风扇的PWM控制，使用LEDC外设生成25kHz PWM信号，每个风扇可独立设置状态。
 
-**原规格**（`openspec/specs/actuator-control/spec.md`）：
-- 风扇使用 30FAN Module X1，PWM 控制（GPIO26）
+**原规格变更点**：
+- 从单风扇扩展为3风扇（Fan0/Fan1/Fan2）
+- GPIO分配：Fan0=GPIO26, Fan1=GPIO27, Fan2=GPIO33
+- LEDC通道：3个风扇共用TIMER_0，分别使用CHANNEL_0/1/2
+- 接口函数增加FanId参数支持独立控制
 
-**增量修改**：
-明确 LEDC 配置参数（25kHz, 8-bit, LOW_SPEED_MODE）和占空比映射规则（OFF:0, LOW:150/180, HIGH:200/255）。
-
-#### Scenario: 初始化 LEDC PWM 外设
+#### Scenario: 初始化3个风扇的LEDC PWM外设
 
 **Given**：
-- 系统启动，LEDC 未配置
+- 系统启动，LEDC未配置
 
 **When**：
 - 调用 `fan_control_init()`
 
 **Then**：
-1. 配置 LEDC 定时器：
+1. 配置 LEDC 定时器（共用）：
    - 速度模式：`LEDC_LOW_SPEED_MODE`
    - 分辨率：`LEDC_TIMER_8_BIT`（0-255）
    - 频率：25kHz
    - 时钟源：`LEDC_AUTO_CLK`
-2. 配置 LEDC 通道：
-   - GPIO：GPIO_NUM_26
-   - 通道：`LEDC_CHANNEL_0`
-   - 定时器：`LEDC_TIMER_0`
+2. 配置3个 LEDC 通道：
+   - Fan0: GPIO26, CHANNEL_0
+   - Fan1: GPIO27, CHANNEL_1
+   - Fan2: GPIO33, CHANNEL_2
+   - 定时器：均绑定 LEDC_TIMER_0
    - 初始占空比：0（关闭）
 3. 返回 `ESP_OK`
 
 **Acceptance Criteria**：
-- ✅ LEDC 定时器和通道配置成功
-- ✅ GPIO26 输出 PWM 波形，频率 25kHz ± 5%
-- ✅ 初始占空比为 0
+- LEDC 定时器和3个通道配置成功
+- GPIO26/27/33 输出 PWM 波形，频率 25kHz ± 5%
+- 所有风扇初始占空比为 0
 
-**注意**：ESP32-S3 跳过 GPIO22-25，因此使用 GPIO20（I2C SCL）和 GPIO26（PWM）
-
-#### Scenario: 设置风扇状态并输出 PWM
+#### Scenario: 独立设置单个风扇状态
 
 **Given**：
 - LEDC 已初始化
-- 当前风扇状态为 `FAN_OFF`
+- 3个风扇均为 `FAN_OFF`
 
 **When**：
-- 调用 `fan_control_set_state(FAN_HIGH, false)`（白天模式）
+- 调用 `fan_control_set_state(FAN_ID_1, FAN_HIGH, false)`
 
 **Then**：
-1. 计算 PWM 占空比：255（100%）
-2. 调用 `ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 255)`
-3. 调用 `ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0)`
-4. 更新内部状态：`current_state = FAN_HIGH`, `current_pwm = 255`
-5. 返回 `ESP_OK`
+1. 仅Fan1的PWM占空比设置为255
+2. Fan0和Fan2保持不变（PWM=0）
+3. 返回 `ESP_OK`
 
 **Acceptance Criteria**：
-- ✅ FAN_OFF → PWM duty = 0
-- ✅ FAN_LOW (白天) → PWM duty = 180
-- ✅ FAN_LOW (夜间) → PWM duty = 150
-- ✅ FAN_HIGH (白天) → PWM duty = 255
-- ✅ FAN_HIGH (夜间) → PWM duty = 200
-- ✅ PWM 输出占空比可通过示波器测量验证
+- 仅指定风扇状态改变
+- 其他风扇不受影响
+- 支持FAN_ID_0/1/2三个有效ID
 
-#### Scenario: PWM 范围保护
+#### Scenario: 批量设置所有风扇状态
 
 **Given**：
-- 外部调用者尝试设置超出范围的 PWM 值
+- LEDC 已初始化
+- 3个风扇状态各异
 
 **When**：
-- 调用 `fan_control_set_pwm(300)`
+- 调用 `fan_control_set_all(FAN_LOW, true)`（夜间模式）
 
 **Then**：
-- `fan_clamp_pwm(300)` 限幅为 255
-- 实际设置的 PWM 为 255
-- 打印 DEBUG 日志：`设置 PWM：300 -> 255 (clamp 后)`
+1. 3个风扇PWM占空比均设置为150（夜间低速）
+2. 返回 `ESP_OK`
 
 **Acceptance Criteria**：
-- ✅ PWM < 150 且 != 0 → 限幅为 150（最小启动扭矩）
-- ✅ PWM > 255 → 限幅为 255（最大占空比）
-- ✅ PWM = 0 → 保持 0（允许关闭）
+- 所有风扇统一设置
+- 夜间模式占空比映射正确
+
+#### Scenario: 查询单个风扇状态
+
+**Given**：
+- Fan0=OFF, Fan1=LOW, Fan2=HIGH
+
+**When**：
+- 调用 `fan_control_get_state(FAN_ID_2)`
+
+**Then**：
+- 返回 `FAN_HIGH`
+
+**Acceptance Criteria**：
+- 返回指定风扇的当前状态
+- 无效ID返回FAN_OFF
+
+#### Scenario: PWM范围保护（多风扇）
+
+**Given**：
+- 外部调用者尝试设置超出范围的PWM值
+
+**When**：
+- 调用 `fan_control_set_pwm(FAN_ID_0, 300)`
+
+**Then**：
+- 实际设置的PWM为255（限幅后）
+- 仅影响Fan0
+
+**Acceptance Criteria**：
+- PWM限幅逻辑对每个风扇独立生效
+- 限幅规则不变：0保持0，<150限幅150，>255限幅255
 

@@ -2,7 +2,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: 多风扇控制接口
+### Requirement: 风扇控制接口
 
 系统 MUST 支持3个独立风扇的PWM控制，使用LEDC外设生成25kHz PWM信号，每个风扇可独立设置状态。
 

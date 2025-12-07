@@ -28,6 +28,20 @@ typedef enum {
 } SystemState;
 
 /**
+ * @brief 风扇数量
+ */
+#define FAN_COUNT 3
+
+/**
+ * @brief 风扇ID枚举
+ */
+typedef enum {
+    FAN_ID_0 = 0,  ///< 风扇0（GPIO26）
+    FAN_ID_1 = 1,  ///< 风扇1（GPIO27）
+    FAN_ID_2 = 2   ///< 风扇2（GPIO33）
+} FanId;
+
+/**
  * @brief 系统运行模式
  */
 typedef enum {
@@ -44,6 +58,13 @@ typedef enum {
     FAN_LOW = 1,    ///< 低速档位
     FAN_HIGH = 2,   ///< 高速档位
 } FanState;
+
+/**
+ * @brief 多风扇状态结构
+ */
+typedef struct {
+    FanState states[FAN_COUNT];  ///< 3个风扇的状态数组
+} MultiFanState;
 
 // ============================================================================
 // 数据结构定义

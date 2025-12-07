@@ -67,3 +67,21 @@
 - 若远程命令缺失即退回 `FAN_OFF`，一旦 MQTT 链路异常就会导致风扇强制停机，无法满足“远程命令缺失 → 维持上一有效状态”的契约。
 - 无效的传感器快照被推送至 MQTT，远程服务器据此决策会产生噪声甚至误判，特别是在系统刚进入 STATE_RUNNING 的阶段。
 - 未清理的天气配置/文档会让部署者继续申请 API Key 并在 menuconfig 中填入“必需”字段，却完全无处使用，交付体验受损。
+
+# expand-multi-fan-control 审查上下文
+日期：2025-12-07 17:50 (UTC+8) — Codex
+
+## 核心代码触点
+- `main/main.h:27-70` 定义 `FAN_COUNT=3`、`FanId` 与 `MultiFanState` 结构，为多风扇模块提供一致的枚举/数组维度。
+- `main/actuators/fan_control.c:8-200` 将 GPIO 映射与 LEDC 通道改为数组（Fan0→GPIO26, Fan1→GPIO27, Fan2→GPIO33），`fan_control_set_state(id, state)`、`fan_control_set_all()` 负责独立/批量控制。
+- `main/algorithm/decision_engine.c:12-54` 的 `decision_make()` 现以 `FanState[FAN_COUNT]` 作为输入/输出：MODE_REMOTE 直接使用远程数组、MODE_LOCAL 同步 3 个风扇、MODE_SAFE_STOP 全部关闭。
+- `main/network/mqtt_wrapper.c:32-310` 解析命令 `fan_0`~`fan_2` 并在状态 JSON 中输出相同字段；`mqtt_get_remote_command()`/`mqtt_publish_status()` 的签名均接受 `FanState` 数组。
+- `main/main.c:39-383` 新建 `shared_fan_states[FAN_COUNT]`，决策任务更新数组，网络/显示任务在发布与 UI 中读取。
+
+## 相关规范
+- `openspec/changes/expand-multi-fan-control/specs/actuator-control/spec.md:1-120` 规定三风扇的 GPIO/LEDC 映射、批量控制和查询场景。
+- `openspec/changes/expand-multi-fan-control/specs/network-services/spec.md:1-118` 描述命令/状态 JSON 均需包含 `fan_0/fan_1/fan_2`，并支持部分更新。
+
+## 关键疑问
+1. `handle_error_state()` 仅调用 `fan_control_set_all(FAN_OFF)`（`main/main.c:162-175`），但未写回 `shared_fan_states`。`network_task` 和 `display_task` 仍读取旧数组（`main/main.c:335-343`, `375-383`），安全停机后 MQTT/UI 会继续显示过时状态，是否违背网络服务 spec 的“状态上报反映真实硬件”要求？
+2. 官方指南 `Guides/MQTT.md` 仍展示单字段 `fan_state`（`Guides/MQTT.md:24-120, 262-299`）及 `shared_fan_state` 数据流，而实现只解析 `fan_0`~`fan_2`（`main/network/mqtt_wrapper.c:93-111`）。若文档不更新，远程控制端会依据旧格式发送命令并被忽略，是否需要提供兼容层或同步更新指南？

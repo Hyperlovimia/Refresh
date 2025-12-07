@@ -130,3 +130,52 @@
 2025-12-06 23:36 (UTC+8) | shell(rg/spec cat) | 查看 openspec/changes/remove-local-online-decision 下的 spec/tasks
 2025-12-06 23:36 (UTC+8) | sequential-thinking | 记录 remove-local-online-decision 审查推理 4 步
 2025-12-06 23:37 (UTC+8) | plan.update | 更新三步审查计划的进度
+2025-12-07 17:49 (UTC+8) | sequential-thinking | expand-multi-fan-control 审查初步推理
+2025-12-07 17:49 (UTC+8) | plan.update | 建立三步审查计划（收集→分析→交付）
+2025-12-07 17:49 (UTC+8) | shell(ls) | 查看仓库根目录
+2025-12-07 17:49 (UTC+8) | shell(ls -a) | 检查隐藏文件与 .claude 目录
+2025-12-07 17:49 (UTC+8) | shell(git status -sb) | 获取当前工作树状态
+2025-12-07 17:50 (UTC+8) | shell(git diff main/main.h) | 查看 main.h 多风扇常量改动
+2025-12-07 17:50 (UTC+8) | shell(git diff main/actuators/fan_control.h) | 审阅 fan_control.h 新接口
+2025-12-07 17:50 (UTC+8) | shell(git diff main/actuators/fan_control.c) | 审阅 fan_control.c 多风扇实现差异
+2025-12-07 17:51 (UTC+8) | shell(sed -n '1,220p' main/actuators/fan_control.c) | 阅读 fan_control.c 关键实现
+2025-12-07 17:51 (UTC+8) | shell(sed -n '1,200p' main/actuators/fan_control.h) | 阅读 fan_control.h 全部声明
+2025-12-07 17:51 (UTC+8) | shell(git diff main/algorithm/decision_engine.h) | 查看决策引擎头文件更新
+2025-12-07 17:51 (UTC+8) | shell(git diff main/algorithm/decision_engine.c) | 审阅决策引擎实现差异
+2025-12-07 17:52 (UTC+8) | shell(sed -n '1,200p' main/algorithm/decision_engine.c) | 阅读决策引擎源文件
+2025-12-07 17:52 (UTC+8) | shell(git diff main/network/mqtt_wrapper.h) | 审阅 MQTT 头文件改动
+2025-12-07 17:52 (UTC+8) | shell(git diff main/network/mqtt_wrapper.c) | 审阅 MQTT 实现差异
+2025-12-07 17:53 (UTC+8) | shell(sed -n '1,220p' main/network/mqtt_wrapper.c) | 阅读 MQTT 源文件前段
+2025-12-07 17:53 (UTC+8) | shell(rg -n \"snprintf\" main/network/mqtt_wrapper.c) | 检查 snprintf 使用点
+2025-12-07 17:53 (UTC+8) | shell(head -n 30 main/network/mqtt_wrapper.c) | 确认头部 include 列表
+2025-12-07 17:53 (UTC+8) | shell(rg -n \"stdio\" main/network/mqtt_wrapper.c) | 搜索 stdio 引用
+2025-12-07 17:54 (UTC+8) | shell(git diff main/main.c) | 查看主程序多风扇改动
+2025-12-07 17:54 (UTC+8) | shell(sed -n '1,160p' main/main.c) | 阅读 main.c 开头段
+2025-12-07 17:54 (UTC+8) | shell(rg -n \"shared_fan_state\" main/main.c) | 检查旧变量引用
+2025-12-07 17:55 (UTC+8) | shell(sed -n '420,520p' main/main.c) | 阅读初始化收尾段
+2025-12-07 17:55 (UTC+8) | shell(sed -n '140,220p' main/main.c) | 阅读状态机/ERROR 处理
+2025-12-07 17:55 (UTC+8) | shell(rg -n \"fan_control\" main/main.c) | 检索风扇控制调用
+2025-12-07 17:55 (UTC+8) | shell(rg -n \"fan_control_set_state\" -n) | 搜索新接口调用点
+2025-12-07 17:55 (UTC+8) | shell(rg -n \"fan_control_get_state\" -n) | 检查查询接口引用
+2025-12-07 17:55 (UTC+8) | shell(rg -n \"mqtt_get_remote_command\" -n) | 检查远程命令读取点
+2025-12-07 17:56 (UTC+8) | shell(ls .claude) | 查看 .claude 目录内容
+2025-12-07 17:56 (UTC+8) | shell(cat .claude/context-codex.md) | 阅读现有上下文文件
+2025-12-07 17:56 (UTC+8) | shell(cat .claude/review-report.md) | 阅读历史审查报告
+2025-12-07 17:56 (UTC+8) | shell(cat .claude/operations-log.md) | 查看以往操作记录
+2025-12-07 17:56 (UTC+8) | shell(date) | 获取当前时间 (CST)
+2025-12-07 17:57 (UTC+8) | shell(nl -ba main/main.c | sed -n '150,210p') | 提取 ERROR 状态段落行号
+2025-12-07 17:57 (UTC+8) | shell(nl -ba main/main.c | sed -n '320,360p') | 提取网络任务行号
+2025-12-07 17:57 (UTC+8) | shell(nl -ba main/main.c | sed -n '360,420p') | 提取显示任务行号
+2025-12-07 17:57 (UTC+8) | shell(nl -ba main/algorithm/decision_engine.c) | 记录决策引擎行号
+2025-12-07 17:58 (UTC+8) | shell(nl -ba main/main.c | sed -n '250,320p') | 提取决策任务行号
+2025-12-07 17:58 (UTC+8) | shell(rg -n \"FAN_COUNT\") | 检查 FAN_COUNT 使用范围
+2025-12-07 17:58 (UTC+8) | shell(sed -n '1,200p' openspec/changes/expand-multi-fan-control/specs/network-services/spec.md) | 阅读网络服务 spec delta
+2025-12-07 17:58 (UTC+8) | shell(sed -n '1,200p' openspec/changes/expand-multi-fan-control/specs/actuator-control/spec.md) | 阅读风扇控制 spec delta
+2025-12-07 17:58 (UTC+8) | shell(cat openspec/changes/expand-multi-fan-control/tasks.md) | 查看任务清单
+2025-12-07 17:59 (UTC+8) | shell(rg -n \"fan_state\" Guides/MQTT.md) | 检查指南中的字段描述
+2025-12-07 17:59 (UTC+8) | shell(nl -ba Guides/MQTT.md | sed -n '20,120p') | 获取状态/命令 JSON 行号
+2025-12-07 17:59 (UTC+8) | shell(nl -ba Guides/MQTT.md | sed -n '230,320p') | 获取共享资源/日志示例行号
+2025-12-07 18:00 (UTC+8) | plan.update | 将计划推进为“分析进行中”
+2025-12-07 18:02 (UTC+8) | apply_patch(.claude/context-codex.md) | 追加 expand-multi-fan-control 上下文
+2025-12-07 18:03 (UTC+8) | apply_patch(.claude/structured-request.md) | 新建结构化需求描述
+2025-12-07 18:05 (UTC+8) | apply_patch(.claude/review-report.md) | 写入多风扇审查报告结论
