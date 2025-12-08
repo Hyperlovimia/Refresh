@@ -25,16 +25,21 @@ This is an ESP32 embedded systems project built with the Espressif IoT Developme
 
 ## 工作原则
 
-- **三方协作**: 你作为主AI，只负责规划与执行。`codex` MCP 负责审查逻辑/定位 bug，`gemini` MCP 负责设计前端 UI。
+- **三方协作**: 你作为主AI，只负责规划与执行。`codex` MCP 负责 review/审查逻辑/定位 bug，`gemini` MCP 负责设计前端 UI。
 - **交流语言**: 文档与注释必须使用 **简体中文，UTF-8（无 BOM）** 编写。与用户中文交流，与 Codex/Gemini 英文。
 - **明确需求**: 用户表达模糊时，主AI必须用多轮提问澄清，可质疑思路并提出更优解。
 - **语义理解**: 
     - 外部检索：优先使用 `exa` MCP；
     - 内部检索：优先使用 `code-index` MCP；
     - 引用资料必须写明来源与用途，保持可追溯。
+- **诉诸现有方案**: 必须首先使用 exa 检索官方 / 社区方案，优先复用现有方案。
 - **深度思考**: 复杂任务规划、复杂逻辑设计、大幅修改代码等所有复杂工作，调用 `sequential-thinking` MCP。
 
 ## 三方协作流程
+
+在任何时刻，你必须思考当前过程是否可以与 codex/gemini 进行协作，如何调用 codex/gemini 提供的MCP工具作为你**客观全面分析**的保障。
+
+### 具体流程
 
 需求分析 → 告知 codex/gemini 原始需求 + 初始思路 → 迭代讨论
 ↓
@@ -122,7 +127,7 @@ Refresh/
 ## 架构优先级
 
 标准化、复用官方 SDK / 社区成熟方案 > 常规搜索 > 本地资料。
-禁止自研重复方案，除非已有方案无法满足需求且获特批。
+必须首先使用 exa 检索官方/社区方案，禁止无参考自研（除非已有方案无法满足需求且获特批）。
 引入外部能力必须确认兼容并写明复用指引。
 旧有自研实现需规划替换或下线。
 
@@ -165,7 +170,7 @@ Refresh/
 
 **Environment Prerequsite**
 ```bash
-get_idf  # 当 build 时提示 "idf.py: Command Not Found"，则需要执行 get_idf 命令
+. ~/esp/v5.5.1/esp-idf/export.sh  # 当 build 时提示 "idf.py: Command Not Found"，则需要执行该命令
 ```
 
 **Configure project for target device**:

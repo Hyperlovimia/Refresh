@@ -26,6 +26,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
     - 内部检索：优先使用 `code-index` MCP；
     - 引用资料必须写明来源与用途，保持可追溯。
 - **深度思考**: 复杂任务规划、复杂逻辑设计、大幅修改代码等所有复杂工作，调用 `sequential-thinking` MCP。
+- **诉诸现有方案**: 必须首先使用 exa 检索官方 / 社区方案，优先复用现有方案，禁止无参考自研。
 - **架构优先级**：标准化、复用官方 SDK / 社区成熟方案 > 常规搜索 > 本地资料。
 
     ### 工作原则（作为 MCP 被调用时）
