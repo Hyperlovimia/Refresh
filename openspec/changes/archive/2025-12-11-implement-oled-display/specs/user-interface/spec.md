@@ -98,7 +98,7 @@ OLED 显示模块 MUST 提供初始化功能，配置 I2C 通信和显示参数�
 
 ---
 
-### Requirement: 趋势图绘制
+### Requirement: 趋势图绘制（预留功能）
 
 趋势图 MUST 显示最近 10 小时的 CO₂ 浓度变化（60 个数据点，每 10 分钟一个点）。
 
@@ -125,10 +125,3 @@ OLED 显示模块 MUST 提供初始化功能，配置 I2C 通信和显示参数�
 - 标记当前值位置（实心点）
 - 使用 `u8g2_DrawLine()` 连接相邻数据点
 
-## REMOVED Requirements
-
-### Requirement: 天气数据显示
-
-**Reason**: 天气 API 已迁移至远程服务器，ESP32 本地不再获取和显示天气数据。
-
-**Migration**: 天气信息（PM2.5、AQI）现由远程服务器 UI 展示，本地 OLED 仅显示室内传感器数据。
