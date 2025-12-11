@@ -50,6 +50,8 @@ static bool g_alert_active = false;
 static bool g_alert_blink_state = false;
 static TimerHandle_t g_alert_timer = NULL;
 static TimerHandle_t g_blink_timer = NULL;
+static char g_alert_message[64] = {0};  // 缓存告警消息
+static uint8_t g_alert_countdown = 3;   // 倒计时秒数
 
 // ============================================================================
 // 内部函数声明
@@ -62,6 +64,7 @@ static void draw_trend_graph(void);
 static void draw_status_bar(FanState fan, SystemMode mode);
 static void alert_timer_callback(TimerHandle_t timer);
 static void blink_timer_callback(TimerHandle_t timer);
+static void draw_alert_page(void);
 
 // ============================================================================
 // 公共函数实现
@@ -86,8 +89,8 @@ esp_err_t oled_display_init(void) {
         u8g2_esp32_gpio_and_delay_cb
     );
 
-    // 设置 I2C 地址
-    u8g2_SetI2CAddress(&g_u8g2, OLED_I2C_ADDRESS << 1);
+    // 设置 I2C 地址（8-bit 格式，已左移）
+    u8g2_SetI2CAddress(&g_u8g2, OLED_I2C_ADDRESS << 1);  // 0x3C << 1 = 0x78
 
     // 初始化 HAL
     u8g2_esp32_hal_init(hal, &g_u8g2);
@@ -99,8 +102,8 @@ esp_err_t oled_display_init(void) {
     u8g2_SendBuffer(&g_u8g2);
 
     // 创建定时器
-    g_alert_timer = xTimerCreate("alert_timer", pdMS_TO_TICKS(3000), pdFALSE, NULL, alert_timer_callback);
-    g_blink_timer = xTimerCreate("blink_timer", pdMS_TO_TICKS(500), pdTRUE, NULL, blink_timer_callback);
+    g_alert_timer = xTimerCreate("alert_timer", pdMS_TO_TICKS(1000), pdTRUE, NULL, alert_timer_callback);  // 1秒周期，自动重载
+    g_blink_timer = xTimerCreate("blink_timer", pdMS_TO_TICKS(500), pdTRUE, NULL, blink_timer_callback);   // 0.5秒周期，1Hz闪烁
 
     if (!g_alert_timer || !g_blink_timer) {
         ESP_LOGE(TAG, "创建定时器失败");
@@ -150,39 +153,21 @@ void oled_display_alert(const char *message) {
 
     ESP_LOGW(TAG, "显示告警: %s", message);
 
+    // 缓存告警消息
+    strncpy(g_alert_message, message, sizeof(g_alert_message) - 1);
+    g_alert_message[sizeof(g_alert_message) - 1] = '\0';
+
     // 激活告警模式
     g_alert_active = true;
     g_alert_blink_state = true;
+    g_alert_countdown = 3;
 
     // 启动定时器
     xTimerStart(g_alert_timer, 0);
     xTimerStart(g_blink_timer, 0);
 
-    // 获取 I2C 锁保护显示操作
-    SemaphoreHandle_t i2c_mutex = get_i2c_mutex();
-    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        u8g2_ClearBuffer(&g_u8g2);
-
-        // 绘制告警页面
-        u8g2_SetFont(&g_u8g2, u8g2_font_10x20_tf);
-
-        // 闪烁图标
-        if (g_alert_blink_state) {
-            u8g2_DrawStr(&g_u8g2, 30, 20, "! ! !");
-        }
-
-        // 告警消息
-        u8g2_SetFont(&g_u8g2, u8g2_font_6x10_tf);
-        u8g2_DrawStr(&g_u8g2, 20, 40, message);
-
-        // 倒计时提示
-        u8g2_DrawStr(&g_u8g2, 10, 60, "3s auto return");
-
-        u8g2_SendBuffer(&g_u8g2);
-        xSemaphoreGive(i2c_mutex);
-    } else {
-        ESP_LOGW(TAG, "获取 I2C 锁超时，跳过告警显示");
-    }
+    // 立即绘制第一帧
+    draw_alert_page();
 }
 
 void oled_add_history_point(SensorData *sensor) {
@@ -350,14 +335,54 @@ static void draw_status_bar(FanState fan, SystemMode mode) {
     u8g2_DrawStr(&g_u8g2, 70, 63, wifi_str);
 }
 
+static void draw_alert_page(void) {
+    // 获取 I2C 锁保护显示操作
+    SemaphoreHandle_t i2c_mutex = get_i2c_mutex();
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        u8g2_ClearBuffer(&g_u8g2);
+
+        // 绘制告警页面
+        u8g2_SetFont(&g_u8g2, u8g2_font_10x20_tf);
+
+        // 闪烁图标
+        if (g_alert_blink_state) {
+            u8g2_DrawStr(&g_u8g2, 30, 20, "! ! !");
+        }
+
+        // 告警消息
+        u8g2_SetFont(&g_u8g2, u8g2_font_6x10_tf);
+        u8g2_DrawStr(&g_u8g2, 20, 40, g_alert_message);
+
+        // 倒计时提示
+        char countdown_str[32];
+        snprintf(countdown_str, sizeof(countdown_str), "%ds auto return", g_alert_countdown);
+        u8g2_DrawStr(&g_u8g2, 10, 60, countdown_str);
+
+        u8g2_SendBuffer(&g_u8g2);
+        xSemaphoreGive(i2c_mutex);
+    }
+}
+
 static void alert_timer_callback(TimerHandle_t timer) {
-    // 3 秒后关闭告警
-    g_alert_active = false;
-    xTimerStop(g_blink_timer, 0);
-    ESP_LOGI(TAG, "告警自动关闭");
+    // 每秒递减倒计时
+    if (g_alert_countdown > 0) {
+        g_alert_countdown--;
+        draw_alert_page();  // 更新倒计时显示
+    }
+
+    if (g_alert_countdown == 0) {
+        // 3 秒后关闭告警
+        g_alert_active = false;
+        xTimerStop(g_blink_timer, 0);
+        xTimerStop(g_alert_timer, 0);
+        ESP_LOGI(TAG, "告警自动关闭");
+    }
 }
 
 static void blink_timer_callback(TimerHandle_t timer) {
-    // 切换闪烁状态
+    // 切换闪烁状态并重绘
     g_alert_blink_state = !g_alert_blink_state;
+    if (g_alert_active) {
+        draw_alert_page();
+    }
 }

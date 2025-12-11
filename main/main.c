@@ -372,6 +372,8 @@ static void display_task(void *pvParameters) {
 
     ESP_LOGI(TAG, "显示任务启动");
 
+    uint32_t history_counter = 0;  // 历史数据点计数器
+
     while (1) {
         // 检查告警队列
         if (xQueueReceive(alert_queue, &alert_msg, 0) == pdTRUE) {
@@ -387,6 +389,13 @@ static void display_task(void *pvParameters) {
             xSemaphoreGive(data_mutex);
 
             oled_display_main_page(&sensor, fan, current_mode);
+
+            // 每 10 分钟添加一个历史数据点（300 次循环 * 2秒 = 600秒 = 10分钟）
+            history_counter++;
+            if (history_counter >= 300) {
+                oled_add_history_point(&sensor);
+                history_counter = 0;
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(2000)); // 0.5Hz

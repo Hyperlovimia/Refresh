@@ -47,9 +47,12 @@ uint8_t u8g2_esp32_i2c_byte_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
 
         case U8X8_MSG_BYTE_END_TRANSFER: {
             // 发送 I2C 数据
+            // u8x8_GetI2CAddress 返回的已经是 8-bit 地址（已左移）
+            uint8_t i2c_address = u8x8_GetI2CAddress(u8x8);
+
             i2c_cmd_handle_t cmd = i2c_cmd_link_create();
             i2c_master_start(cmd);
-            i2c_master_write_byte(cmd, (u8x8_GetI2CAddress(u8x8) << 1) | I2C_MASTER_WRITE, true);
+            i2c_master_write_byte(cmd, i2c_address | I2C_MASTER_WRITE, true);
             i2c_master_write(cmd, buffer, buf_idx, true);
             i2c_master_stop(cmd);
 
