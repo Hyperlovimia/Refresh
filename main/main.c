@@ -386,7 +386,7 @@ static void display_task(void *pvParameters) {
             fan = shared_fan_states[0];  // 暂时显示第一个风扇状态
             xSemaphoreGive(data_mutex);
 
-            oled_display_main_page(&sensor, NULL, fan, current_mode);
+            oled_display_main_page(&sensor, fan, current_mode);
         }
 
         vTaskDelay(pdMS_TO_TICKS(2000)); // 0.5Hz

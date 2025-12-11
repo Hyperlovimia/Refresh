@@ -18,15 +18,15 @@ esp_err_t oled_display_init(void);
 
 /**
  * @brief 显示主页面
- *   - 第1行：CO2 温度 湿度
- *   - 第2-3行：风扇状态 系统模式
- *   - 第4行：WiFi 状态
+ *   - 第1行：CO2 数值 + 模式徽章
+ *   - 第2行：温度 湿度
+ *   - 第3-6行：CO2 趋势图（扩展区域）
+ *   - 第7-8行：风扇状态 + WiFi 状态
  * @param sensor 传感器数据
- * @param weather 天气数据
  * @param fan 风扇状态
  * @param mode 系统模式
  */
-void oled_display_main_page(SensorData *sensor, WeatherData *weather, FanState fan, SystemMode mode);
+void oled_display_main_page(SensorData *sensor, FanState fan, SystemMode mode);
 
 /**
  * @brief 显示告警页面

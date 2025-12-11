@@ -10,6 +10,7 @@ idf_component_register(
         "network/wifi_manager.c"
         "network/mqtt_wrapper.c"
         "ui/oled_display.c"
+        "ui/u8g2_esp32_hal.c"
     INCLUDE_DIRS
         "."
         "sensors"
@@ -26,4 +27,5 @@ idf_component_register(
         mqtt
         json
         esp_timer
+        u8g2
 )
