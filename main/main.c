@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -59,6 +60,26 @@ static QueueHandle_t alert_queue = NULL;
  */
 SemaphoreHandle_t get_i2c_mutex(void) {
     return i2c_mutex;
+}
+
+/**
+ * @brief 判断当前是否为夜间模式
+ * 夜间时间定义：22:00-8:00
+ * 注意：需要通过 WiFi 连接后 SNTP 同步时间，或手动设置时间
+ * @return true 夜间模式，false 白天模式
+ */
+bool is_night_time(void) {
+    time_t now;
+    struct tm timeinfo;
+    
+    // 获取当前时间
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    
+    int hour = timeinfo.tm_hour;
+    
+    // 夜间时间：22:00-23:59 或 0:00-7:59
+    return (hour >= 22 || hour < 8);
 }
 
 // ============================================================================
@@ -292,8 +313,22 @@ static void decision_task(void *pvParameters) {
         decision_make(&sensor, remote_cmd, current_mode, new_states);
 
         // 设置风扇状态
-        bool is_night = false;
+        bool is_night = is_night_time();
         bool state_changed = false;
+        
+        // 记录夜间模式状态（每分钟记录一次）
+        static uint32_t last_night_log = 0;
+        uint32_t now_sec = xTaskGetTickCount() / configTICK_RATE_HZ;
+        if (now_sec - last_night_log >= 60) {
+            time_t now;
+            struct tm timeinfo;
+            time(&now);
+            localtime_r(&now, &timeinfo);
+            ESP_LOGI(TAG, "当前时间: %02d:%02d:%02d, 夜间模式: %s", 
+                     timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+                     is_night ? "是" : "否");
+            last_night_log = now_sec;
+        }
 
         for (int i = 0; i < FAN_COUNT; i++) {
             if (new_states[i] != old_states[i]) {
@@ -428,6 +463,11 @@ static esp_err_t system_init(void) {
         return ESP_FAIL;
     }
     ESP_LOGI(TAG, "✓ NVS初始化成功");
+
+    // 设置时区（中国标准时间 UTC+8）
+    setenv("TZ", "CST-8", 1);
+    tzset();
+    ESP_LOGI(TAG, "✓ 时区设置完成（CST-8）");
 
     // 创建同步对象
     data_mutex = xSemaphoreCreateMutex();

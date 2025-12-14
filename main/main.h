@@ -173,4 +173,11 @@ typedef struct {
  */
 SemaphoreHandle_t get_i2c_mutex(void);
 
+/**
+ * @brief 判断当前是否为夜间模式
+ * 夜间时间定义：22:00-8:00
+ * @return true 夜间模式，false 白天模式
+ */
+bool is_night_time(void);
+
 #endif // MAIN_H
