@@ -98,6 +98,7 @@ esp_err_t oled_display_init(void) {
     // 初始化显示
     u8g2_InitDisplay(&g_u8g2);
     u8g2_SetPowerSave(&g_u8g2, 0);  // 唤醒显示
+    u8g2_SetFontMode(&g_u8g2, 1);   // 启用透明字体模式（支持 UTF-8）
     u8g2_ClearBuffer(&g_u8g2);
     u8g2_SendBuffer(&g_u8g2);
 
@@ -203,7 +204,7 @@ static void draw_co2_value(SensorData *sensor) {
         u8g2_DrawStr(&g_u8g2, 0, 15, buf);
 
         // 状态标签
-        u8g2_SetFont(&g_u8g2, u8g2_font_6x10_tf);
+        u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
         const char *status = "OK";
         if (sensor->pollutants.co2 > CO2_ALERT_THRESHOLD) {
             status = "HIGH!";
@@ -212,14 +213,14 @@ static void draw_co2_value(SensorData *sensor) {
         } else if (sensor->pollutants.co2 > CO2_THRESHOLD_LOW) {
             status = "Mid";
         }
-        u8g2_DrawStr(&g_u8g2, 60, 15, status);
+        u8g2_DrawStr(&g_u8g2, 60, 16, status);
     } else {
         u8g2_DrawStr(&g_u8g2, 0, 15, "---");
     }
 }
 
 static void draw_mode_badge(SystemMode mode) {
-    u8g2_SetFont(&g_u8g2, u8g2_font_5x7_tf);
+    u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
 
     const char *badge = "";
     switch (mode) {
@@ -234,13 +235,13 @@ static void draw_mode_badge(SystemMode mode) {
             break;
     }
 
-    u8g2_DrawStr(&g_u8g2, 95, 10, badge);
+    u8g2_DrawStr(&g_u8g2, 95, 16, badge);
 }
 
 static void draw_temp_humidity(SensorData *sensor) {
     char buf[32];
 
-    u8g2_SetFont(&g_u8g2, u8g2_font_6x10_tf);
+    u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
 
     if (sensor->valid) {
         snprintf(buf, sizeof(buf), "T:%.1fC H:%.0f%%", sensor->temperature, sensor->humidity);
@@ -312,7 +313,7 @@ static void draw_trend_graph(void) {
 static void draw_status_bar(FanState fan, SystemMode mode) {
     char buf[32];
 
-    u8g2_SetFont(&g_u8g2, u8g2_font_5x7_tf);
+    u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
 
     // 风扇状态
     const char *fan_str = "OFF";
@@ -350,7 +351,7 @@ static void draw_alert_page(void) {
         }
 
         // 告警消息
-        u8g2_SetFont(&g_u8g2, u8g2_font_6x10_tf);
+        u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
         u8g2_DrawStr(&g_u8g2, 20, 40, g_alert_message);
 
         // 倒计时提示
