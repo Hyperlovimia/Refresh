@@ -14,7 +14,7 @@ static bool s_i2c_ready = false;
 #define SHT35_I2C_ADDR          0x44
 #define SHT35_I2C_SDA           GPIO_NUM_21
 #define SHT35_I2C_SCL           GPIO_NUM_20
-#define SHT35_I2C_FREQ_HZ       100000
+#define SHT35_I2C_FREQ_HZ       400000
 
 esp_err_t sht35_init(void) {
     if (s_i2c_ready) {
@@ -43,7 +43,7 @@ esp_err_t sht35_init(void) {
     }
 
     s_i2c_ready = true;
-    ESP_LOGI(TAG, "初始化 SHT35 完成 I2C GPIO21/20 100kHz 地址0x44");
+    ESP_LOGI(TAG, "初始化 SHT35 完成 I2C GPIO21/20 400kHz 地址0x44");
     return ESP_OK;
 }
 
@@ -93,21 +93,28 @@ esp_err_t sht35_read(float *temp, float *humi) {
         return err;
     }
 
-    // 延迟 15ms 等待测量完成
-    vTaskDelay(pdMS_TO_TICKS(15));
+    // 延迟 50ms 等待测量完成（放宽以提高兼容性）
+    vTaskDelay(pdMS_TO_TICKS(50));
 
-    // 读取 6 字节数据
     uint8_t data[6];
-    cmd_handle = i2c_cmd_link_create();
-    i2c_master_start(cmd_handle);
-    i2c_master_write_byte(cmd_handle, (SHT35_I2C_ADDR << 1) | I2C_MASTER_READ, true);
-    i2c_master_read(cmd_handle, data, 6, I2C_MASTER_LAST_NACK);
-    i2c_master_stop(cmd_handle);
-    err = i2c_master_cmd_begin(SHT35_I2C_NUM, cmd_handle, pdMS_TO_TICKS(1000));
-    i2c_cmd_link_delete(cmd_handle);
+    int attempts = 0;
+    for (; attempts < 2; attempts++) {
+        // 读取 6 字节数据
+        cmd_handle = i2c_cmd_link_create();
+        i2c_master_start(cmd_handle);
+        i2c_master_write_byte(cmd_handle, (SHT35_I2C_ADDR << 1) | I2C_MASTER_READ, true);
+        i2c_master_read(cmd_handle, data, 6, I2C_MASTER_LAST_NACK);
+        i2c_master_stop(cmd_handle);
+        err = i2c_master_cmd_begin(SHT35_I2C_NUM, cmd_handle, pdMS_TO_TICKS(1000));
+        i2c_cmd_link_delete(cmd_handle);
+
+        if (err == ESP_OK) break;
+        ESP_LOGW(TAG, "读取数据失败，重试 (%d) err=%d", attempts + 1, err);
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
 
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "读取数据失败 (%d)", err);
+        ESP_LOGE(TAG, "最终读取数据失败 (%d)", err);
         return err;
     }
 
@@ -131,6 +138,8 @@ esp_err_t sht35_read(float *temp, float *humi) {
 
     *temp = -45.0f + 175.0f * ((float)raw_temp / 65535.0f);
     *humi = 100.0f * ((float)raw_humi / 65535.0f);
+
+    ESP_LOGI(TAG, "SHT35 OK T=%.2f H=%.2f", *temp, *humi);
 
     return ESP_OK;
 }

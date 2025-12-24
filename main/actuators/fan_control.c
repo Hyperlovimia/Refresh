@@ -14,9 +14,9 @@ static bool s_ledc_ready = false;
 
 // GPIO 映射
 static const gpio_num_t FAN_GPIO[FAN_COUNT] = {
-    GPIO_NUM_26,  // Fan0
-    GPIO_NUM_27,  // Fan1
-    GPIO_NUM_33   // Fan2
+    GPIO_NUM_36,  // Fan0
+    GPIO_NUM_37,  // Fan1
+    GPIO_NUM_38   // Fan2
 };
 
 // LEDC 通道映射
@@ -103,7 +103,7 @@ esp_err_t fan_control_init(void) {
         current_state[i] = FAN_OFF;
         current_pwm[i] = 0;
     }
-    ESP_LOGI(TAG, "初始化风扇控制完成 GPIO26/27/33 25kHz 8位");
+    ESP_LOGI(TAG, "初始化风扇控制完成 GPIO36/37/38 25kHz 8位");
     return ESP_OK;
 }
 

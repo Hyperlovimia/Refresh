@@ -20,7 +20,7 @@ static const char *TAG = "MQTT_CLIENT";
 // MQTT 主题定义
 #define MQTT_TOPIC_STATUS   "home/ventilation/status"
 #define MQTT_TOPIC_ALERT    "home/ventilation/alert"
-#define MQTT_TOPIC_COMMAND  "home/ventilation/command"
+#define MQTT_TOPIC_COMMAND  "home/ventilation/command/#"
 
 // MQTT 重连配置
 #define MQTT_RECONNECT_DELAY_MS  30000  // 30 秒重连间隔

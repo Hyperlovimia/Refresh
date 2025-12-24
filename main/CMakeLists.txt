@@ -11,6 +11,7 @@ idf_component_register(
         "network/mqtt_wrapper.c"
         "ui/oled_display.c"
         "ui/u8g2_esp32_hal.c"
+        "tools/i2c_scanner.c"
     INCLUDE_DIRS
         "."
         "sensors"

@@ -11,7 +11,7 @@
 
 /**
  * @brief 初始化 OLED 显示器
- * 初始化 u8g2 库，I2C GPIO21/22，地址0x3C
+ * 初始化 u8g2 库，I2C GPIO21/20，地址0x3C
  * @return ESP_OK 成功，ESP_FAIL 失败
  */
 esp_err_t oled_display_init(void);

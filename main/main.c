@@ -253,17 +253,20 @@ static void sensor_task(void *pvParameters) {
         }
         xSemaphoreGive(data_mutex);
 
-        // 检查CO₂告警
-        if (data.valid && data.pollutants.co2 > CO2_ALERT_THRESHOLD) {
-            char alert_msg[64];
-            snprintf(alert_msg, sizeof(alert_msg), "CO₂浓度过高: %.0f ppm", data.pollutants.co2);
+        // 检查CO₂告警（基于显示值的 1/4）
+        if (data.valid) {
+            float effective_co2 = data.pollutants.co2 / 4.0f;
+            if (effective_co2 > CO2_ALERT_THRESHOLD) {
+                char alert_msg[64];
+                snprintf(alert_msg, sizeof(alert_msg), "CO₂浓度过高: %.0f ppm", effective_co2);
 
-            // 发送到显示队列
-            xQueueSend(alert_queue, &alert_msg, 0);
+                // 发送到显示队列
+                xQueueSend(alert_queue, &alert_msg, 0);
 
-            // 发送到 MQTT（如果已连接）
-            if (wifi_manager_is_connected()) {
-                mqtt_publish_alert(alert_msg);
+                // 发送到 MQTT（如果已连接）
+                if (wifi_manager_is_connected()) {
+                    mqtt_publish_alert(alert_msg);
+                }
             }
         }
 
@@ -379,9 +382,11 @@ static void network_task(void *pvParameters) {
                     memcpy(fans, shared_fan_states, sizeof(fans));
                     xSemaphoreGive(data_mutex);
 
-                    // 仅在传感器数据有效时发布
+                    // 仅在传感器数据有效时发布（发布的 co2 使用 1/4 显示值）
                     if (sensor.valid) {
-                        esp_err_t ret = mqtt_publish_status(&sensor, fans, current_mode);
+                        SensorData pub_sensor = sensor;
+                        pub_sensor.pollutants.co2 = sensor.pollutants.co2 / 4.0f;
+                        esp_err_t ret = mqtt_publish_status(&pub_sensor, fans, current_mode);
                         if (ret != ESP_OK) {
                             ESP_LOGW(TAG, "MQTT 状态发布失败");
                         }
@@ -408,6 +413,7 @@ static void display_task(void *pvParameters) {
     ESP_LOGI(TAG, "显示任务启动");
 
     uint32_t history_counter = 0;  // 历史数据点计数器
+    bool initial_point_added = false;  // 初始数据点添加标志
 
     while (1) {
         // 检查告警队列
@@ -422,6 +428,13 @@ static void display_task(void *pvParameters) {
             memcpy(&sensor, &shared_sensor_data, sizeof(SensorData));
             fan = shared_fan_states[0];  // 暂时显示第一个风扇状态
             xSemaphoreGive(data_mutex);
+
+            // 启动后立即添加第一个数据点
+            if (!initial_point_added && sensor.valid) {
+                oled_add_history_point(&sensor);
+                initial_point_added = true;
+                ESP_LOGI(TAG, "添加初始历史数据点");
+            }
 
             oled_display_main_page(&sensor, fan, current_mode);
 
@@ -551,6 +564,10 @@ void app_main(void) {
     xTaskCreate(decision_task, "decision", TASK_STACK_SIZE_SMALL, NULL, TASK_PRIORITY_DECISION, NULL);
     xTaskCreate(network_task, "network", TASK_STACK_SIZE_LARGE, NULL, TASK_PRIORITY_NETWORK, NULL);
     xTaskCreate(display_task, "display", TASK_STACK_SIZE_SMALL, NULL, TASK_PRIORITY_DISPLAY, NULL);
+
+    // 临时：启动 I2C 扫描任务（调试用，运行一次后自删除）
+    extern void i2c_scanner_task(void *pv);
+    xTaskCreate(i2c_scanner_task, "i2c_scan", 2048, NULL, tskIDLE_PRIORITY + 1, NULL);
 
     ESP_LOGI(TAG, "所有任务已创建");
 

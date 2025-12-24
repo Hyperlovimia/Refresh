@@ -69,20 +69,40 @@ float co2_sensor_read_ppm(void) {
         return -1.0f;
     }
 
-    uint8_t buffer[32];
-    int len = uart_read_bytes(CO2_SENSOR_UART_NUM, buffer, sizeof(buffer) - 1, pdMS_TO_TICKS(100));
+    uint8_t buffer[64];
+    int total_len = 0;
+    int attempts = 0;
 
-    if (len <= 0) {
+    // 尝试多次读取，拼接到 buffer，直到遇到换行或达到缓冲区
+    while (attempts < 3 && total_len < (int)sizeof(buffer) - 1) {
+        int len = uart_read_bytes(CO2_SENSOR_UART_NUM, buffer + total_len, sizeof(buffer) - 1 - total_len, pdMS_TO_TICKS(300));
+        if (len > 0) {
+            total_len += len;
+            // 如果读到换行，认为一帧结束
+            if (memchr(buffer, '\n', total_len)) {
+                break;
+            }
+        } else {
+            // 无数据，本次尝试结束
+            break;
+        }
+        attempts++;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    if (total_len <= 0) {
         // 无数据或超时
+        ESP_LOGW(TAG, "CO2 raw read timeout");
         return -1.0f;
     }
 
-    buffer[len] = '\0';  // 确保字符串结尾
+    buffer[total_len] = '\0';  // 确保字符串结尾
+    ESP_LOGI(TAG, "CO2 raw (%d bytes): '%s'", total_len, (char *)buffer);
 
     // 查找 "ppm" 字符串（格式：  xxxx ppm\r\n）
     char *ppm_pos = strstr((char *)buffer, "ppm");
     if (!ppm_pos) {
-        ESP_LOGW(TAG, "未找到 'ppm' 标志");
+        ESP_LOGW(TAG, "未找到 'ppm' 标志 (raw='%s')", (char *)buffer);
         return -1.0f;
     }
 
@@ -106,12 +126,14 @@ float co2_sensor_read_ppm(void) {
     }
     value_str[i] = '\0';
 
+
     if (i == 0) {
-        ESP_LOGW(TAG, "未找到有效数值");
+        ESP_LOGW(TAG, "未找到有效数值 (raw='%s')", (char *)buffer);
         return -1.0f;
     }
 
     float co2_ppm = atof(value_str);
+    ESP_LOGI(TAG, "CO2 parsed value_str='%s' -> %.1f ppm", value_str, co2_ppm);
 
     // 范围验证（JX-CO2-102-5K: 0-5000 ppm）
     if (co2_ppm < 0.0f || co2_ppm > 5000.0f) {

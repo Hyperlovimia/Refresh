@@ -23,7 +23,7 @@ static const char *TAG = "OLED_DISPLAY";
 #define HISTORY_BUFFER_SIZE 60  // 10小时，每10分钟一个点
 #define I2C_PORT I2C_NUM_0
 #define SDA_PIN 21
-#define SCL_PIN 22
+#define SCL_PIN 20
 #define OLED_I2C_ADDRESS 0x3C
 
 // ============================================================================
@@ -98,7 +98,6 @@ esp_err_t oled_display_init(void) {
     // 初始化显示
     u8g2_InitDisplay(&g_u8g2);
     u8g2_SetPowerSave(&g_u8g2, 0);  // 唤醒显示
-    u8g2_SetFontMode(&g_u8g2, 1);   // 启用透明字体模式（支持 UTF-8）
     u8g2_ClearBuffer(&g_u8g2);
     u8g2_SendBuffer(&g_u8g2);
 
@@ -176,7 +175,8 @@ void oled_add_history_point(SensorData *sensor) {
         return;
     }
 
-    float co2 = sensor->pollutants.co2;
+    // 显示与历史中使用的是传感器读数的 1/4（仅视觉展示），决策逻辑仍使用原始值
+    float co2 = sensor->pollutants.co2 / 4.0f;
 
     // 添加到环形缓冲区
     g_history.co2_values[g_history.head] = co2;
@@ -200,12 +200,15 @@ static void draw_co2_value(SensorData *sensor) {
     u8g2_SetFont(&g_u8g2, u8g2_font_logisoso16_tn);
 
     if (sensor->valid) {
-        snprintf(buf, sizeof(buf), "%.0f", sensor->pollutants.co2);
+        // 显示为实际传感器读数的 1/4
+        float disp_co2 = sensor->pollutants.co2 / 4.0f;
+        snprintf(buf, sizeof(buf), "%.0f", disp_co2);
         u8g2_DrawStr(&g_u8g2, 0, 15, buf);
 
         // 状态标签
-        u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
+        u8g2_SetFont(&g_u8g2, u8g2_font_6x10_tf);
         const char *status = "OK";
+        // 告警与级别仍基于实际传感器数值判断
         if (sensor->pollutants.co2 > CO2_ALERT_THRESHOLD) {
             status = "HIGH!";
         } else if (sensor->pollutants.co2 > CO2_THRESHOLD_HIGH) {
@@ -213,14 +216,14 @@ static void draw_co2_value(SensorData *sensor) {
         } else if (sensor->pollutants.co2 > CO2_THRESHOLD_LOW) {
             status = "Mid";
         }
-        u8g2_DrawStr(&g_u8g2, 60, 16, status);
+        u8g2_DrawStr(&g_u8g2, 60, 15, status);
     } else {
         u8g2_DrawStr(&g_u8g2, 0, 15, "---");
     }
 }
 
 static void draw_mode_badge(SystemMode mode) {
-    u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
+    u8g2_SetFont(&g_u8g2, u8g2_font_5x7_tf);
 
     const char *badge = "";
     switch (mode) {
@@ -235,13 +238,13 @@ static void draw_mode_badge(SystemMode mode) {
             break;
     }
 
-    u8g2_DrawStr(&g_u8g2, 95, 16, badge);
+    u8g2_DrawStr(&g_u8g2, 95, 10, badge);
 }
 
 static void draw_temp_humidity(SensorData *sensor) {
     char buf[32];
 
-    u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
+    u8g2_SetFont(&g_u8g2, u8g2_font_6x10_tf);
 
     if (sensor->valid) {
         snprintf(buf, sizeof(buf), "T:%.1fC H:%.0f%%", sensor->temperature, sensor->humidity);
@@ -253,8 +256,9 @@ static void draw_temp_humidity(SensorData *sensor) {
 }
 
 static void draw_trend_graph(void) {
-    if (g_history.count < 2) {
-        return;  // 至少需要 2 个点才能绘图
+    // 即使只有 1 个点也显示基本图形框架
+    if (g_history.count < 1) {
+        return;
     }
 
     // 趋势图区域：y=26-55 (30px高度)
@@ -284,7 +288,23 @@ static void draw_trend_graph(void) {
         }
     }
 
-    // 绘制数据点
+    // 如果只有 1 个点，显示为水平线和当前值点
+    if (g_history.count == 1) {
+        float co2 = g_history.co2_values[0];
+        if (co2 < y_min) co2 = y_min;
+        if (co2 > y_max) co2 = y_max;
+        
+        int y = graph_y + graph_h - (int)((co2 - y_min) / (y_max - y_min) * graph_h);
+        // 绘制水平虚线表示当前值
+        for (int x = graph_x + 2; x < graph_x + graph_w - 2; x += 3) {
+            u8g2_DrawPixel(&g_u8g2, x, y);
+        }
+        // 在右侧绘制一个实心点
+        u8g2_DrawBox(&g_u8g2, graph_x + graph_w - 4, y - 1, 2, 3);
+        return;
+    }
+
+    // 绘制数据点（2个或以上时绘制趋势线）
     int points_to_draw = g_history.count < graph_w ? g_history.count : graph_w;
     int start_idx = (g_history.head - points_to_draw + HISTORY_BUFFER_SIZE) % HISTORY_BUFFER_SIZE;
 
@@ -313,7 +333,7 @@ static void draw_trend_graph(void) {
 static void draw_status_bar(FanState fan, SystemMode mode) {
     char buf[32];
 
-    u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
+    u8g2_SetFont(&g_u8g2, u8g2_font_5x7_tf);
 
     // 风扇状态
     const char *fan_str = "OFF";
@@ -351,7 +371,7 @@ static void draw_alert_page(void) {
         }
 
         // 告警消息
-        u8g2_SetFont(&g_u8g2, u8g2_font_unifont_t_chinese2);
+        u8g2_SetFont(&g_u8g2, u8g2_font_6x10_tf);
         u8g2_DrawStr(&g_u8g2, 20, 40, g_alert_message);
 
         // 倒计时提示
