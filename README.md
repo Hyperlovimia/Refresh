@@ -57,13 +57,15 @@
 
 | 模块           | ESP32-S3 引脚 | 接口类型 | 说明                          |
 |----------------|---------------|----------|-------------------------------|
-| CO₂ 传感器     | GPIO16 (TX)   | UART     | 发送数据到传感器              |
-|                | GPIO17 (RX)   | UART     | 接收传感器数据                |
+| CO₂ 传感器     | GPIO17 (TX)   | UART     | ESP32 发送数据到传感器        |
+|                | GPIO16 (RX)   | UART     | ESP32 接收传感器数据          |
 | SHT35 温湿度   | GPIO21 (SDA)  | I2C      | I2C 数据线                    |
 |                | GPIO20 (SCL)  | I2C      | I2C 时钟线                    |
 | OLED 显示屏    | GPIO21 (SDA)  | I2C      | 与 SHT35 共享 I2C 总线        |
 |                | GPIO20 (SCL)  | I2C      | I2C 地址：0x3C                |
-| 风扇控制       | GPIO26        | PWM      | PWM 频率 25kHz，分辨率 8 位   |
+| 风扇控制 0     | GPIO36        | PWM      | PWM 频率 25kHz，分辨率 8 位   |
+| 风扇控制 1     | GPIO37        | PWM      | PWM 频率 25kHz，分辨率 8 位   |
+| 风扇控制 2     | GPIO38        | PWM      | PWM 频率 25kHz，分辨率 8 位   |
 
 **注意：** SHT35 和 OLED 共享 I2C 总线，需要确保地址不冲突（SHT35: 0x44, OLED: 0x3C）。
 
